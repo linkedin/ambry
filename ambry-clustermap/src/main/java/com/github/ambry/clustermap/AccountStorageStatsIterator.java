@@ -32,11 +32,18 @@ public class AccountStorageStatsIterator implements Iterator<Pair<String, HostAc
   private final Iterator<String> instances;
   private final AccountStatsStore accountStatsStore;
   private final ClusterMapConfig clusterMapConfig;
+  private final Long minimumReportTimestampMs;
 
   public AccountStorageStatsIterator(List<String> instances, AccountStatsStore accountStatsStore, ClusterMapConfig clusterMapConfig) {
+    this(instances, accountStatsStore, clusterMapConfig, null);
+  }
+
+  public AccountStorageStatsIterator(List<String> instances, AccountStatsStore accountStatsStore,
+      ClusterMapConfig clusterMapConfig, Long minimumReportTimestampMs) {
     this.instances = instances.iterator();
     this.accountStatsStore = accountStatsStore;
     this.clusterMapConfig = clusterMapConfig;
+    this.minimumReportTimestampMs = minimumReportTimestampMs;
   }
 
   @Override
@@ -49,8 +56,12 @@ public class AccountStorageStatsIterator implements Iterator<Pair<String, HostAc
     String hostname = instances.next();
     try {
       Pair<String, Integer> hostNameAndPort = TaskUtils.getHostNameAndPort(hostname, clusterMapConfig.clusterMapPort);
-      return new Pair<>(hostname,
-          accountStatsStore.queryHostAccountStorageStatsByHost(hostNameAndPort.getFirst(), hostNameAndPort.getSecond()));
+      HostAccountStorageStatsWrapper statsWrapper =
+          minimumReportTimestampMs == null ? accountStatsStore.queryHostAccountStorageStatsByHost(
+              hostNameAndPort.getFirst(), hostNameAndPort.getSecond())
+              : accountStatsStore.queryHostAccountStorageStatsByHostForRecovery(hostNameAndPort.getFirst(),
+                  hostNameAndPort.getSecond(), minimumReportTimestampMs);
+      return new Pair<>(hostname, statsWrapper);
     } catch (Exception e) {
       logger.error("Failed to get account storage stats for {}", hostname);
       throw new RuntimeException(e);
