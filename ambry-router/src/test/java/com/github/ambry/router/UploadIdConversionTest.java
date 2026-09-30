@@ -93,17 +93,14 @@ public class UploadIdConversionTest extends NonBlockingRouterTestBase {
           String blobId = stored.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
           assertFalse("Upload callback must wait for ID conversion", result.isDone());
           conversion.done(failure == null ? blobId : null, failure);
-          pendingConversion.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-              .onCompletion(failure == null ? blobId : null, failure);
+          Callback<String> conversionCallback = pendingConversion.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          assertEquals(Boolean.TRUE, request.getArgs().get(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
+          conversionCallback.onCompletion(failure == null ? blobId : null, failure);
           if (failure == null) {
             assertEquals(blobId, result.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
           } else {
-            assertException(ExecutionException.class, () -> result.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS), e -> {
-              RestServiceException error = (RestServiceException) e.getCause();
-              assertEquals(failure instanceof RouterException ? RestServiceErrorCode.InternalServerError
-                  : RestServiceErrorCode.BadRequest, error.getErrorCode());
-              assertSame(failure, failure instanceof RouterException ? error.getCause() : error);
-            });
+            assertException(ExecutionException.class, () -> result.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS),
+                e -> assertSame(failure, e.getCause()));
           }
           assertEquals(1, callbackCount.get());
           GetBlobResult blob = router.getBlob(blobId, new GetBlobOptionsBuilder().build())
@@ -121,6 +118,7 @@ public class UploadIdConversionTest extends NonBlockingRouterTestBase {
       assertException(ExecutionException.class, () -> result.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS),
           e -> assertEquals(RouterErrorCode.InvalidBlobId, ((RouterException) e.getCause()).getErrorCode()));
       verifyNoInteractions(converter);
+      assertNull(request.getArgs().get(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
     }
   }
 

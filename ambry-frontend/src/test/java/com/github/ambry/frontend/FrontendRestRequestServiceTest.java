@@ -2246,6 +2246,26 @@ public class FrontendRestRequestServiceTest {
   }
 
   @Test
+  public void testGeneratedIdResponseMapping() throws Exception {
+    for (Object context : new Object[]{null, false, true, "true"}) {
+      for (RouterErrorCode code : RouterErrorCode.values()) {
+        try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
+          if (context != null) {
+            request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, context);
+          }
+          RouterException error = new RouterException("router failure", code);
+          MockRestResponseChannel response = new MockRestResponseChannel();
+          frontendRestRequestService.submitResponse(request, response, null, error);
+          RestServiceErrorCode expected = Boolean.TRUE.equals(context) && code == RouterErrorCode.InvalidBlobId
+              ? RestServiceErrorCode.InternalServerError : RestServiceErrorCode.getRestServiceErrorCode(code);
+          assertEquals(ResponseStatus.getResponseStatus(expected), response.getStatus());
+          assertSame(error, response.getException().getCause());
+        }
+      }
+    }
+  }
+
+  @Test
   public void testUploadBlobIdErrorClassification() throws Exception {
     refContainer = new ContainerBuilder(refContainer).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL)
         .setTtlRequired(false).build();
@@ -2256,7 +2276,7 @@ public class FrontendRestRequestServiceTest {
     idConverterFactory = converterFactory;
     router = spy(router);
     doReturn(converterFactory.getIdConverter()).when(router).getIdConverter();
-    frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService = spy(getFrontendRestRequestService());
     frontendRestRequestService.start();
     String namedPath = "/named/" + refAccount.getName() + "/" + refContainer.getName() + "/blob";
     String s3Path = namedPath.replace("/named/", "/s3/");
@@ -2328,7 +2348,7 @@ public class FrontendRestRequestServiceTest {
             if (failure instanceof RouterException
                 && ((RouterException) failure).getErrorCode() == RouterErrorCode.BlobTooLarge) {
               expected = RestServiceErrorCode.RequestTooLarge;
-            } else if (failure instanceof RouterException && !(stitch && stage.equals("router"))) {
+            } else if (failure instanceof RouterException && !stage.equals("router")) {
               expected = RestServiceErrorCode.InternalServerError;
             } else {
               expected = RestServiceErrorCode.BadRequest;
@@ -2345,6 +2365,8 @@ public class FrontendRestRequestServiceTest {
               assertSame(failure, failure instanceof RouterException ? response.getException().getCause()
                   : response.getException());
             }
+            verify(frontendRestRequestService).submitResponse(request, response, null,
+                parseGeneratedId ? (RouterException) response.getException().getCause() : failure);
             verify(router, times(stage.equals("ttl") ? 1 : 0))
                 .updateBlobTtl(any(), anyString(), any(), anyLong(), any(), any());
           }
@@ -2362,6 +2384,7 @@ public class FrontendRestRequestServiceTest {
       for (String operation : new String[]{"GET", "HEAD", "DELETE", Operations.UPDATE_TTL, Operations.UNDELETE}) {
         boolean put = operation.equals(Operations.UPDATE_TTL) || operation.equals(Operations.UNDELETE);
         JSONObject headers = new JSONObject().put(BLOB_ID, blobId).put(SERVICE_ID, "test");
+        headers.put(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, "true");
         try (RestRequest request = createRestRequest(put ? RestMethod.PUT : RestMethod.valueOf(operation),
             put ? "/" + operation : "/" + blobId, headers, null)) {
           assertEquals(ResponseStatus.BadRequest,

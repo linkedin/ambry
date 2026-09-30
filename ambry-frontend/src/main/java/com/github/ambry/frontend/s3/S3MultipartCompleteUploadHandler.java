@@ -136,7 +136,6 @@ public class S3MultipartCompleteUploadHandler<R> {
     private final RestResponseChannel restResponseChannel;
     private final Callback<ReadableStreamChannel> finalCallback;
     private final String uri;
-    private boolean blobIdIsServerGenerated;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -147,13 +146,7 @@ public class S3MultipartCompleteUploadHandler<R> {
         Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.finalCallback = (result, exception) -> {
-        if (blobIdIsServerGenerated && exception instanceof RouterException
-            && ((RouterException) exception).getErrorCode() == RouterErrorCode.InvalidBlobId) {
-          exception = new RestServiceException(exception, RestServiceErrorCode.InternalServerError);
-        }
-        finalCallback.onCompletion(result, exception);
-      };
+      this.finalCallback = finalCallback;
       this.uri = restRequest.getUri();
     }
 
@@ -248,7 +241,7 @@ public class S3MultipartCompleteUploadHandler<R> {
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo,
         BlobProperties propertiesPassedInRouterUpload) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, blobId -> {
-        blobIdIsServerGenerated = true;
+        restRequest.setArg(BLOB_ID_IS_SERVER_GENERATED, true);
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesPassedInRouterUpload.getBlobSize());
@@ -285,6 +278,7 @@ public class S3MultipartCompleteUploadHandler<R> {
      */
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        restRequest.removeArg(BLOB_ID_IS_SERVER_GENERATED);
         // Set the named blob state to be 'READY' after the Ttl update succeed
         if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
           throw new RestServiceException(

@@ -143,6 +143,7 @@ public class S3MultipartUploadTest {
     FutureResult<Void> putResult = new FutureResult<>();
     s3PutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
+    assertNull(request.getArgs().get(InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
     String etag1 = (String) restResponseChannel.getHeader(Headers.ETAG);
     String location1 = (String) restResponseChannel.getHeader(Headers.LOCATION);
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
@@ -196,6 +197,7 @@ public class S3MultipartUploadTest {
     // Verify Upsert header is set by default for S3 multipart uploads.
     assertTrue("Upsert header must be present", request.getArgs().containsKey(NAMED_UPSERT));
     readableStreamChannel = postResult.get();
+    assertNull(request.getArgs().get(InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
     byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
     byte[] byteArray = byteBuffer.array();
     CompleteMultipartUploadResult completeMultipartUploadResult =

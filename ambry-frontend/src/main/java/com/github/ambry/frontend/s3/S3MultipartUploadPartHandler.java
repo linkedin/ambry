@@ -29,15 +29,12 @@ import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.router.RouterErrorCode;
-import com.github.ambry.router.RouterException;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -126,7 +123,6 @@ public class S3MultipartUploadPartHandler<R> {
     private final RestResponseChannel restResponseChannel;
     private final Callback<ReadableStreamChannel> finalCallback;
     private final String uri;
-    private boolean blobIdIsServerGenerated;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -137,13 +133,7 @@ public class S3MultipartUploadPartHandler<R> {
         Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.finalCallback = (result, exception) -> {
-        if (blobIdIsServerGenerated && exception instanceof RouterException
-            && ((RouterException) exception).getErrorCode() == RouterErrorCode.InvalidBlobId) {
-          exception = new RestServiceException(exception, RestServiceErrorCode.InternalServerError);
-        }
-        finalCallback.onCompletion(result, exception);
-      };
+      this.finalCallback = finalCallback;
       this.uri = restRequest.getUri();
     }
 
@@ -184,7 +174,6 @@ public class S3MultipartUploadPartHandler<R> {
           finalCallback.onCompletion(null, null);
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          blobIdIsServerGenerated = true;
           router.putBlob(null, blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
@@ -199,6 +188,7 @@ public class S3MultipartUploadPartHandler<R> {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
+        restRequest.setArg(BLOB_ID_IS_SERVER_GENERATED, true);
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         // TODO [S3] Make changes to sign ETags. Currently they are sent as shown below.
         //  ETag: {"chunks":[{"blob":"AAYQAQBlAAgAAQAAAAAAAAAAw6UGCoNgS8KGgV-SGXAMdQ","size":4194304},
@@ -207,6 +197,7 @@ public class S3MultipartUploadPartHandler<R> {
         S3MultipartETag etag = new S3MultipartETag(putBlobMetaInfo.getOrderedChunkIdSizeList());
         String eTagStr = S3MultipartETag.serialize(etag);
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, eTagStr);
+        restRequest.removeArg(BLOB_ID_IS_SERVER_GENERATED);
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, logger, finalCallback);
     }
