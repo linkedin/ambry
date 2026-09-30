@@ -354,6 +354,64 @@ public class ReplicationManager extends ReplicationEngine {
         // leaderBasedReplicationAdmin. LeaderBasedReplicationAdmin::addLeaderPartition is thread safe.
         leaderBasedReplicationAdmin.addLeaderPartition(partitionName);
       }
+      try {
+        recordStandbyToLeaderPromotionLag(partitionName);
+      } catch (Exception e) {
+        logger.warn("Failed to record lag metric on STANDBY->LEADER promotion for partition {}", partitionName, e);
+      }
+    }
+
+    /**
+     * Detects whether a replica was behind its peers at the moment Helix promoted it STANDBY -> LEADER.
+     * Helix transitions STANDBY -> LEADER without any data-parity check; we emit metrics here so we can
+     * verify in production that promoted leaders are actually caught up (or flag when they aren't).
+     *
+     * Lag against local-DC peers and lag against remote-DC peers carry different operational meaning:
+     * intra-DC replication is all-to-all in both ALL_TO_ALL and LEADER_BASED modes, so a healthy leader
+     * should be ~0 against local peers, while remote-DC lag reflects cross-DC propagation delay and is
+     * non-zero in steady state by design. They are reported as separate histograms.
+     *
+     * Signals per promotion:
+     * - {@link ReplicationMetrics#standbyToLeaderPromotionLocalDcLagBytes}: max cached lag across LOCAL-DC
+     *   peers whose lag is known (>= 0).
+     * - {@link ReplicationMetrics#standbyToLeaderPromotionRemoteDcLagBytes}: max cached lag across REMOTE-DC
+     *   peers whose lag is known (>= 0).
+     * - {@link ReplicationMetrics#standbyToLeaderPromotionUnknownLagPeerCount}: incremented when every peer
+     *   of the partition (local and remote DC) has an unknown cached lag — no peer can attest to the
+     *   replica's sync state.
+     */
+    private void recordStandbyToLeaderPromotionLag(String partitionName) {
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      if (localReplica == null) {
+        return;
+      }
+      PartitionInfo partitionInfo = partitionToPartitionInfo.get(localReplica.getPartitionId());
+      if (partitionInfo == null) {
+        return;
+      }
+      String localDc = dataNodeId.getDatacenterName();
+      long maxKnownLocalDcLag = -1L;
+      long maxKnownRemoteDcLag = -1L;
+      for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
+        long lag = remoteReplicaInfo.getLocalLagFromRemoteInBytes();
+        if (lag < 0) {
+          continue;
+        }
+        if (localDc.equals(remoteReplicaInfo.getReplicaId().getDataNodeId().getDatacenterName())) {
+          maxKnownLocalDcLag = Math.max(maxKnownLocalDcLag, lag);
+        } else {
+          maxKnownRemoteDcLag = Math.max(maxKnownRemoteDcLag, lag);
+        }
+      }
+      if (maxKnownLocalDcLag >= 0) {
+        replicationMetrics.standbyToLeaderPromotionLocalDcLagBytes.update(maxKnownLocalDcLag);
+      }
+      if (maxKnownRemoteDcLag >= 0) {
+        replicationMetrics.standbyToLeaderPromotionRemoteDcLagBytes.update(maxKnownRemoteDcLag);
+      }
+      if (maxKnownLocalDcLag < 0 && maxKnownRemoteDcLag < 0) {
+        replicationMetrics.standbyToLeaderPromotionUnknownLagPeerCount.inc();
+      }
     }
 
     @Override

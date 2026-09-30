@@ -111,6 +111,8 @@ public class Utils {
   // This is found in Netty's SslHandler, which does not expose the exception message as a constant. Be careful, since
   // the message may change in the future.
   private static final String SSL_ENGINE_CLOSED_EXCEPTION_MSG = "SSLEngine closed already";
+  // Used when a write to the response channel fails because the client channel is already closed.
+  public static final String CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG = "Client channel closed before write could complete";
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
   // The read*String methods assume that the underlying stream is blocking
@@ -1288,7 +1290,8 @@ public class Utils {
       String msg = cause.getMessage();
       if (msg != null) {
         return msg.endsWith(CLIENT_RESET_EXCEPTION_MSG) || msg.endsWith(CLIENT_BROKEN_PIPE_EXCEPTION_MSG)
-            || msg.endsWith(SSL_ENGINE_CLOSED_EXCEPTION_MSG);
+            || msg.endsWith(SSL_ENGINE_CLOSED_EXCEPTION_MSG)
+            || msg.endsWith(CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG);
       }
     }
     return false;

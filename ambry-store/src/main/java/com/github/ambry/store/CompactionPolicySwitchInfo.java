@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 
@@ -22,6 +23,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  */
 @JsonPropertyOrder({"lastCompactionTime", "nextRoundIsCompactAllPolicy"})
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CompactionPolicySwitchInfo {
   private long lastCompactAllTime;
   private boolean nextRoundIsCompactAllPolicy;

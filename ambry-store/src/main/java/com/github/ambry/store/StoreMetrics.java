@@ -445,6 +445,8 @@ public class StoreMetrics {
     registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"));
     registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionCost"));
     registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionBenefit"));
+    registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactedLogCount"));
+    registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "LogSegmentCount"));
   }
 
   /**

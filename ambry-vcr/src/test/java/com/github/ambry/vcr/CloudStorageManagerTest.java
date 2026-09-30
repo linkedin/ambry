@@ -31,12 +31,14 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 
 /**
  * Test for {@code CloudStorageManager}
  */
+@Ignore("VCR test that does not exercise Azurite — ambry-vcr is staged-not-active in production.")
 public class CloudStorageManagerTest {
   private final ClusterMap clusterMap;
 

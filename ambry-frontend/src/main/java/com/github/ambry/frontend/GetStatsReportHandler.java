@@ -25,6 +25,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.server.StatsReportType;
+import com.github.ambry.utils.JsonUtil;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
@@ -36,7 +37,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 class GetStatsReportHandler {
   private static final Logger logger = LoggerFactory.getLogger(GetStatsReportHandler.class);
 
-  private final ObjectMapper mapper = new ObjectMapper();
+  private final ObjectMapper mapper = JsonUtil.newObjectMapper();
   private final SecurityService securityService;
   private final FrontendMetrics metrics;
   private final AccountStatsStore accountStatsStore;

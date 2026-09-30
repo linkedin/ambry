@@ -15,6 +15,9 @@
 
 package com.github.ambry.named;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
@@ -36,6 +39,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLTransientConnectionException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -47,8 +52,11 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -148,6 +156,306 @@ public class MySqlNamedBlobDbTest {
     namedBlobDb.cleanupStaleData(staleNamedBlobs);
   }
 
+  /**
+   * Verify that {@link MySqlNamedBlobDb.TransactionExecutor} registers the per-datacenter queue-size and
+   * active-count gauges, the per-datacenter rejected-count counter, and the per-datacenter enqueue-wait histogram
+   * on construction.
+   */
+  @Test
+  public void testTransactionExecutorMetricsRegistered() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    Metrics metrics = new Metrics(registry, "");
+    MySqlNamedBlobDb db =
+        new MySqlNamedBlobDb(accountService, buildSmallPoolConfig(1, 1, 100), dataSourceFactory, localDatacenter,
+            metrics);
+    try {
+      for (String dc : datacenters) {
+        assertTrue("queue-size gauge missing for datacenter " + dc, registry.getGauges()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorQueueSize." + dc));
+        assertTrue("active-count gauge missing for datacenter " + dc, registry.getGauges()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorActiveCount." + dc));
+        assertTrue("rejected counter missing for datacenter " + dc, registry.getCounters()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + dc));
+        assertTrue("enqueue-wait histogram missing for datacenter " + dc, registry.getHistograms()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + dc));
+        assertTrue("connection-failure counter missing for datacenter " + dc, registry.getCounters()
+            .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobDBConnectionFailureCount." + dc));
+      }
+    } finally {
+      db.close();
+    }
+  }
+
+  /**
+   * Verify that {@code NamedBlobDBConnectionFailureCount.<dc>} increments when a query fails with a
+   * SQLSTATE 08* exception (connection-class failure, e.g. MySQL CommunicationsException) and does
+   * NOT increment for other SQLException types or non-connection SQLSTATEs.
+   */
+  @Test
+  public void testConnectionFailureCounterIncrementsOnSqlState08() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    Metrics metrics = new Metrics(registry, "");
+    MySqlNamedBlobDb db =
+        new MySqlNamedBlobDb(accountService, buildSmallPoolConfig(1, 1, 100), dataSourceFactory, localDatacenter,
+            metrics);
+    try {
+      String metricName =
+          "com.github.ambry.named.MySqlNamedBlobDb.NamedBlobDBConnectionFailureCount." + localDatacenter;
+      Counter counter = registry.getCounters().get(metricName);
+      assertNotNull("connection-failure counter not registered for " + localDatacenter, counter);
+
+      // SQLSTATE 08S01 — MySQL "Communication link failure" (CommunicationsException).
+      SQLException communicationLinkFailure = new SQLException("Communications link failure", "08S01", 0);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, communicationLinkFailure);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(communicationLinkFailure, e.getCause()));
+      assertEquals("counter should increment on SQLSTATE 08S01", 1L, counter.getCount());
+
+      // SQLSTATE 42000 — syntax-class error. Must not increment.
+      SQLException syntaxError = new SQLException("syntax error", "42000", 1064);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, syntaxError);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(syntaxError, e.getCause()));
+      assertEquals("counter must not increment on non-connection SQLSTATE", 1L, counter.getCount());
+
+      // SQLSTATE 08006 — generic "connection failure", should also count.
+      SQLException connectionFailure = new SQLException("connection failure", "08006", 0);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, connectionFailure);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(connectionFailure, e.getCause()));
+      assertEquals("counter should increment on any SQLSTATE 08*", 2L, counter.getCount());
+
+      // SQLException with null SQLSTATE — must not increment (defensive).
+      SQLException nullState = new SQLException("no state");
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, nullState);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(nullState, e.getCause()));
+      assertEquals("counter must not increment when SQLSTATE is null", 2L, counter.getCount());
+
+      // Direct SQLNonTransientConnectionException (mimics MySQL CommunicationsException) — counts via type.
+      SQLException directNonTransient = new SQLNonTransientConnectionException("communications failure");
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, directNonTransient);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(directNonTransient, e.getCause()));
+      assertEquals("counter should increment on SQLNonTransientConnectionException", 3L, counter.getCount());
+
+      // Direct SQLTransientConnectionException (mimics HikariCP pool-timeout shape) — counts via type.
+      SQLException directTransient = new SQLTransientConnectionException("pool timeout");
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, directTransient);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(directTransient, e.getCause()));
+      assertEquals("counter should increment on SQLTransientConnectionException", 4L, counter.getCount());
+
+      // SQLSTATE 40001 (deadlock) — adjacent rollback class, NOT a connection failure.
+      SQLException deadlock = new SQLException("deadlock", "40001", 1213);
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, deadlock);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(deadlock, e.getCause()));
+      assertEquals("counter must not increment on SQLSTATE 40001 (deadlock)", 4L, counter.getCount());
+
+      // Outer SQLException with no SQLSTATE, cause = SQLException with 08006 — counts via getCause walk.
+      SQLException wrappedConnFailure = new SQLException("wrapper, no state");
+      wrappedConnFailure.initCause(new SQLException("inner conn failure", "08006"));
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, wrappedConnFailure);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(wrappedConnFailure, e.getCause()));
+      assertEquals("counter should increment when 08* is in cause chain", 5L, counter.getCount());
+
+      // Outer 99999 with getNextException() = 08006 — counts via next-exception chain.
+      SQLException withNext = new SQLException("outer", "99999");
+      withNext.setNextException(new SQLException("next conn failure", "08006"));
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, withNext);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(withNext, e.getCause()));
+      assertEquals("counter should increment when 08* reachable via getNextException", 6L, counter.getCount());
+
+      // Outer SQLException with no SQLSTATE, cause = SQLNonTransientConnectionException — counts via cause walk to type.
+      SQLException wrappedTyped = new SQLException("wrapper, no state");
+      wrappedTyped.initCause(new SQLNonTransientConnectionException("inner typed"));
+      dataSourceFactory.triggerQueryExecutionError(localDatacenter, wrappedTyped);
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.get(account.getName(), container.getName(), "blobName").get(),
+          e -> Assert.assertEquals(wrappedTyped, e.getCause()));
+      assertEquals("counter should increment when typed connection exception is in cause chain", 7L,
+          counter.getCount());
+    } finally {
+      db.close();
+    }
+  }
+
+  /**
+   * Verify that {@link MySqlNamedBlobDb.TransactionExecutor#close()} deregisters all per-datacenter metrics so
+   * subsequent instantiations do not leak metrics or fail with duplicate-registration errors.
+   */
+  @Test
+  public void testTransactionExecutorGaugesRemovedOnClose() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    Metrics metrics = new Metrics(registry, "");
+    MySqlNamedBlobDb db =
+        new MySqlNamedBlobDb(accountService, buildSmallPoolConfig(1, 1, 100), dataSourceFactory, localDatacenter,
+            metrics);
+    db.close();
+    for (String dc : datacenters) {
+      assertFalse("queue-size gauge for " + dc + " should be removed after close", registry.getGauges()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorQueueSize." + dc));
+      assertFalse("active-count gauge for " + dc + " should be removed after close", registry.getGauges()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorActiveCount." + dc));
+      assertFalse("rejected counter for " + dc + " should be removed after close", registry.getCounters()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + dc));
+      assertFalse("enqueue-wait histogram for " + dc + " should be removed after close", registry.getHistograms()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + dc));
+      assertFalse("connection-failure counter for " + dc + " should be removed after close", registry.getCounters()
+          .containsKey("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobDBConnectionFailureCount." + dc));
+    }
+  }
+
+  /**
+   * Verify that {@link MySqlNamedBlobDb.TransactionExecutor} records enqueue-wait time on a successful submission.
+   */
+  @Test
+  public void testEnqueueWaitTimeRecordedOnSuccessfulSubmit() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    Metrics metrics = new Metrics(registry, "");
+    dataSourceFactory.setLocalDatacenter(localDatacenter);
+    dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
+    MySqlNamedBlobDb db =
+        new MySqlNamedBlobDb(accountService, buildSmallPoolConfig(1, 1, 100), dataSourceFactory, localDatacenter,
+            metrics);
+    try {
+      // Issue any DB call; the resolution itself does not need to succeed for the histogram update to fire.
+      try {
+        db.get(account.getName(), container.getName(), "blobName").get(10, TimeUnit.SECONDS);
+      } catch (Exception ignored) {
+        // We only care that the worker thread ran and recorded the histogram.
+      }
+      Histogram enqueueWaitTime = registry.getHistograms()
+          .get("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobEnqueueWaitTimeInMs." + localDatacenter);
+      assertNotNull("per-datacenter enqueue-wait histogram missing", enqueueWaitTime);
+      assertTrue("enqueue-wait histogram should have at least one sample", enqueueWaitTime.getCount() >= 1);
+    } finally {
+      db.close();
+    }
+  }
+
+  /**
+   * Verify that submissions are rejected with {@link RestServiceErrorCode#ServiceUnavailable} when the per-datacenter
+   * work queue is full, and that the rejection counter increments. Uses {@code delete} (autoCommit=false) which routes
+   * directly to the local datacenter executor without the cross-DC retry policy that {@code get} applies.
+   */
+  @Test
+  public void testTransactionRejectedWhenQueueFull() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    Metrics metrics = new Metrics(registry, "");
+    CountDownLatch workerEntered = new CountDownLatch(1);
+    CountDownLatch releaseWorker = new CountDownLatch(1);
+
+    MySqlNamedBlobDb.DataSourceFactory blockingFactory = endpoint -> {
+      DataSource ds = mock(DataSource.class);
+      try {
+        when(ds.getConnection()).thenAnswer(inv -> {
+          workerEntered.countDown();
+          if (!releaseWorker.await(30, TimeUnit.SECONDS)) {
+            throw new SQLException("test timeout waiting for release");
+          }
+          // Build a connection that yields no rows so the lambda completes once released. The
+          // delete path uses executeUpdate, which we let return 0 rows affected.
+          Connection connection = mock(Connection.class);
+          PreparedStatement statement = mock(PreparedStatement.class);
+          ResultSet resultSet = mock(ResultSet.class);
+          when(resultSet.next()).thenReturn(false);
+          when(statement.executeQuery()).thenReturn(resultSet);
+          when(statement.executeUpdate()).thenReturn(0);
+          when(connection.prepareStatement(any())).thenReturn(statement);
+          return connection;
+        });
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
+      return ds;
+    };
+
+    MySqlNamedBlobDb db =
+        new MySqlNamedBlobDb(accountService, buildSmallPoolConfig(1, 1, 1), blockingFactory, localDatacenter, metrics);
+    try {
+      // Op 1: occupies the single worker (blocks on releaseWorker latch).
+      CompletableFuture<?> op1 = db.delete(account.getName(), container.getName(), "blob1");
+      assertTrue("worker did not enter dataSource.getConnection()",
+          workerEntered.await(10, TimeUnit.SECONDS));
+      // Op 2: fills the bounded queue (capacity 1).
+      CompletableFuture<?> op2 = db.delete(account.getName(), container.getName(), "blob2");
+      // Op 3: queue is full, worker is busy → AbortPolicy rejects.
+      CompletableFuture<?> op3 = db.delete(account.getName(), container.getName(), "blob3");
+
+      TestUtils.assertException(ExecutionException.class, () -> op3.get(5, TimeUnit.SECONDS), e -> {
+        RestServiceException rse = (RestServiceException) e.getCause();
+        assertEquals("rejected transaction should surface as ServiceUnavailable",
+            RestServiceErrorCode.ServiceUnavailable, rse.getErrorCode());
+      });
+      Counter rejected = registry.getCounters()
+          .get("com.github.ambry.named.MySqlNamedBlobDb.NamedBlobTransactionRejectedCount." + localDatacenter);
+      assertNotNull("per-datacenter rejected counter missing", rejected);
+      assertEquals("rejected counter should be 1 after one rejection", 1, rejected.getCount());
+
+      // Confirm gauges reflect the busy/queued state before we drain.
+      Gauge<?> queueGauge = registry.getGauges()
+          .get("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorQueueSize." + localDatacenter);
+      Gauge<?> activeGauge = registry.getGauges()
+          .get("com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutorActiveCount." + localDatacenter);
+      assertNotNull("queue-size gauge missing", queueGauge);
+      assertNotNull("active-count gauge missing", activeGauge);
+      assertEquals("queue should hold op2", 1, ((Number) queueGauge.getValue()).intValue());
+      assertEquals("worker should be running op1", 1, ((Number) activeGauge.getValue()).intValue());
+
+      // Drain the worker so op1 / op2 can complete cleanly during shutdown.
+      releaseWorker.countDown();
+      try {
+        op1.get(10, TimeUnit.SECONDS);
+      } catch (Exception ignored) {
+        // delete on an empty result set typically yields NotFound; we don't care about op1's outcome here.
+      }
+      try {
+        op2.get(10, TimeUnit.SECONDS);
+      } catch (Exception ignored) {
+        // same as above.
+      }
+    } finally {
+      releaseWorker.countDown();
+      db.close();
+    }
+  }
+
+  /**
+   * Build a {@link MySqlNamedBlobDbConfig} with the test datacenters and the given pool / queue sizing.
+   */
+  private MySqlNamedBlobDbConfig buildSmallPoolConfig(int localPoolSize, int remotePoolSize,
+      int maxPendingTransactionsPerDatacenter) {
+    Properties properties = new Properties();
+    JSONArray dbInfo = new JSONArray();
+    for (String datacenter : datacenters) {
+      dbInfo.put(new JSONObject().put("url", "jdbc:mysql://" + datacenter)
+          .put("datacenter", datacenter)
+          .put("isWriteable", true)
+          .put("username", "test")
+          .put("password", "password")
+          .put("sslMode", SSLMode.NONE));
+    }
+    properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
+    properties.setProperty(MySqlNamedBlobDbConfig.LOCAL_POOL_SIZE, Integer.toString(localPoolSize));
+    properties.setProperty(MySqlNamedBlobDbConfig.REMOTE_POOL_SIZE, Integer.toString(remotePoolSize));
+    properties.setProperty(MySqlNamedBlobDbConfig.MAX_PENDING_TRANSACTIONS_PER_DATACENTER,
+        Integer.toString(maxPendingTransactionsPerDatacenter));
+    return new MySqlNamedBlobDbConfig(new VerifiableProperties(properties));
+  }
+
 
   /**
    * Helper method to obtain stale blobs
@@ -163,6 +471,109 @@ public class MySqlNamedBlobDbTest {
       staleNamedBlobsList.addAll(staleBlobsWithLatestBlobName.getStaleBlobs());
     }
     return staleNamedBlobsList;
+  }
+
+  private StaleNamedBlob readyVersion(String blobName, long version, long ageMillis) {
+    long now = System.currentTimeMillis();
+    return new StaleNamedBlob((short) 1, (short) 1, blobName, "blobId-" + version, version, null, NamedBlobState.READY,
+        new java.sql.Timestamp(now - ageMillis));
+  }
+
+  private StaleNamedBlob inProgressVersion(String blobName, long version, long ageMillis) {
+    long now = System.currentTimeMillis();
+    return new StaleNamedBlob((short) 1, (short) 1, blobName, "blobId-" + version, version, null,
+        NamedBlobState.IN_PROGRESS, new java.sql.Timestamp(now - ageMillis));
+  }
+
+  private Set<Long> staleVersionSet(List<StaleNamedBlob> stale) {
+    Set<Long> versions = new HashSet<>();
+    for (StaleNamedBlob b : stale) {
+      versions.add(b.getVersion());
+    }
+    return versions;
+  }
+
+  @Test
+  public void testStaleRetentionKeepsNewestNVersions() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // 6 READY versions of one blob (version-DESC): v6 (newest, 1d old) .. v1 (oldest, 6d old), all within 180 days.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    for (long v = 6; v >= 1; v--) {
+      blobs.add(readyVersion("a", v, (7 - v) * day));
+    }
+    // Keep newest 3 (v6, v5, v4); clean up v3, v2, v1 (beyond the version limit). Age-based cleanup disabled.
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 3, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(3L, 2L, 1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionCleansVersionsOlderThanRetentionDays() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // v3 latest (10d old), v2 (100d old), v1 (200d old); high version limit so only the age rule applies.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 3, 10 * day));
+    blobs.add(readyVersion("a", 2, 100 * day));
+    blobs.add(readyVersion("a", 1, 200 * day));
+    // 180-day rule: v1 (200d) is cleaned; v2 (100d) kept; latest v3 always kept.
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 5, 180).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionAlwaysKeepsLatestEvenIfOld() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // A single READY version 300 days old is the current version; it must never be cleaned up.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 1, 300 * day));
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 5, 180).getStaleBlobs());
+    assertEquals(new HashSet<Long>(), stale);
+  }
+
+  @Test
+  public void testStaleRetentionKeepsOnlyLatestWhenVersionsIsOne() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // Legacy behavior: retentionVersions=1 with age disabled keeps only the latest READY version.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 3, day));
+    blobs.add(readyVersion("a", 2, 2 * day));
+    blobs.add(readyVersion("a", 1, 3 * day));
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 1, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(2L, 1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionCountResetsAcrossBlobNames() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // Two blob names, each with 3 READY versions (version-DESC within a name; the list is name-ASC then version-DESC).
+    // Distinct version numbers so the assertion can tell them apart.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 30, day));
+    blobs.add(readyVersion("a", 20, 2 * day));
+    blobs.add(readyVersion("a", 10, 3 * day));
+    blobs.add(readyVersion("b", 3, day));
+    blobs.add(readyVersion("b", 2, 2 * day));
+    blobs.add(readyVersion("b", 1, 3 * day));
+    // Keep newest 2 per name; the 3rd of each name is stale. If the rank did not reset at the name boundary, b's
+    // versions would be ranked beyond 2 and wrongly cleaned.
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 2, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(10L, 1L)), stale);
+  }
+
+  @Test
+  public void testStaleRetentionCounterOnlyAdvancesOnReadyVersions() {
+    long day = TimeUnit.DAYS.toMillis(1);
+    // One blob name with READY and IN_PROGRESS versions interleaved (version-DESC): v5 READY (latest), v4 IN_PROGRESS,
+    // v3 READY, v2 IN_PROGRESS, v1 READY. With retentionVersions=2 the READY rank must count only READY versions, so
+    // v3 is rank 2 (kept) and v1 is rank 3 (cleaned); the IN_PROGRESS versions (superseded by the latest READY) are
+    // cleaned and must not advance the READY rank.
+    List<StaleNamedBlob> blobs = new ArrayList<>();
+    blobs.add(readyVersion("a", 5, day));
+    blobs.add(inProgressVersion("a", 4, day));
+    blobs.add(readyVersion("a", 3, day));
+    blobs.add(inProgressVersion("a", 2, day));
+    blobs.add(readyVersion("a", 1, day));
+    Set<Long> stale = staleVersionSet(namedBlobDb.getStaleBlobsForActiveContainer(blobs, 5, 2, 0).getStaleBlobs());
+    assertEquals(new HashSet<>(Arrays.asList(4L, 2L, 1L)), stale);
   }
 
   @Test

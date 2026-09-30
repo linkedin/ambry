@@ -122,6 +122,46 @@ public class PublicAccessLogHandlerTest {
   }
 
   /**
+   * Tests that both outbound channel termination APIs mark the close as server initiated.
+   */
+  @Test
+  public void testServerInitiatedCloseMarker() {
+    EmbeddedChannel channel = createChannel(false);
+    Assert.assertFalse("A newly active channel should have no server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+    channel.disconnect().awaitUninterruptibly();
+    Assert.assertTrue("Outbound disconnect should set the server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+
+    channel = createChannel(false);
+    Assert.assertFalse("A newly active channel should have no server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+    channel.close().awaitUninterruptibly();
+    Assert.assertTrue("Outbound close should set the server close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+  }
+
+  /**
+   * Tests that service-down state identifies server termination even when Netty bypasses the outbound handler chain.
+   */
+  @Test
+  public void testServiceDownMarksServerTermination() {
+    RestServerState restServerState = new RestServerState("/healthCheck");
+    restServerState.markServiceUp();
+    EmbeddedChannel channel = createChannel(false, restServerState);
+    Assert.assertFalse("An active service should not classify the channel as server terminated",
+        PublicAccessLogHandler.isServerTermination(channel));
+
+    restServerState.markServiceDown();
+
+    Assert.assertFalse("Service state should not fabricate an outbound close marker",
+        PublicAccessLogHandler.isServerCloseInitiated(channel));
+    Assert.assertTrue("A service-down channel should be classified as server terminated",
+        PublicAccessLogHandler.isServerTermination(channel));
+    channel.finishAndReleaseAll();
+  }
+
+  /**
    * Tests for the request handling flow for close
    * @throws Exception
    */
@@ -336,6 +376,16 @@ public class PublicAccessLogHandlerTest {
    *         and {@link EchoMethodHandler}, and an {@link SslHandler} if needed.
    */
   private EmbeddedChannel createChannel(boolean useSSL) {
+    return createChannel(useSSL, null);
+  }
+
+  /**
+   * Creates an {@link EmbeddedChannel} with optional REST service state.
+   * @param useSSL {@code true} to add an {@link SslHandler} to the pipeline.
+   * @param restServerState the service state to associate with the channel, or {@code null}.
+   * @return the configured channel.
+   */
+  private EmbeddedChannel createChannel(boolean useSSL, RestServerState restServerState) {
     EmbeddedChannel channel = new EmbeddedChannel();
     if (useSSL) {
       SSLEngine sslEngine = SSL_CONTEXT.newEngine(channel.alloc());
@@ -346,7 +396,8 @@ public class PublicAccessLogHandlerTest {
       channel.pipeline().addLast(new SslHandler(mockSSLEngine));
     }
     channel.pipeline()
-        .addLast(new PublicAccessLogHandler(publicAccessLogger, new NettyMetrics(new MetricRegistry())))
+        .addLast(
+            new PublicAccessLogHandler(publicAccessLogger, new NettyMetrics(new MetricRegistry()), restServerState))
         .addLast(new EchoMethodHandler());
     return channel;
   }

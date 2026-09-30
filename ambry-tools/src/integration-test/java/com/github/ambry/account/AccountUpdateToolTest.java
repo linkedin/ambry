@@ -37,6 +37,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONArray;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -58,6 +59,10 @@ import static org.junit.Assert.*;
 public class AccountUpdateToolTest {
   private static final int NUM_REF_ACCOUNT = 10 + (int) (Math.random() * 50);
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
+  // A dummy account seeded in ZK before each test so the HelixAccountServiceFactory non-empty-cache check passes.
+  // Its ID is excluded from generateRefAccounts() via accountIdSet so it never collides with generated accounts.
+  private static final short DUMMY_ACCOUNT_ID = Short.MAX_VALUE;
+  private static final int DUMMY_ACCOUNT_OFFSET = 1;
   private static final int ZK_SERVER_PORT = 2600;
   private static final String DC_NAME = "testDc";
   private static final byte DC_ID = (byte) 1;
@@ -114,7 +119,10 @@ public class AccountUpdateToolTest {
     this.containerJsonVersion = containerJsonVersion;
     idToRefAccountMap = new HashMap<>();
     idToRefContainerMap = new HashMap<>();
-    generateRefAccounts(idToRefAccountMap, idToRefContainerMap, new HashSet<>(), NUM_REF_ACCOUNT,
+    // Reserve DUMMY_ACCOUNT_ID so generateRefAccounts() doesn't pick it for any ref account.
+    HashSet<Short> reservedIds = new HashSet<>();
+    reservedIds.add(DUMMY_ACCOUNT_ID);
+    generateRefAccounts(idToRefAccountMap, idToRefContainerMap, reservedIds, NUM_REF_ACCOUNT,
         NUM_CONTAINER_PER_ACCOUNT);
     tempDirPath = getTempDir("accountUpdateTool-");
 
@@ -123,6 +131,11 @@ public class AccountUpdateToolTest {
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");
     }
+
+    // HelixAccountServiceFactory.getAccountService() calls failIfCacheIsEmpty() which throws when the cache is
+    // empty after the initial ZK load. Seed a single dummy account so the service can start. Tests account for
+    // this dummy in their expected account counts (each expects +1 beyond the accounts they add).
+    seedDummyAccountInZk();
 
     // instantiate a HelixAccountService and listen to the change for account metadata
     notifier = new HelixNotifier(ZK_SERVER_ADDRESS, storeConfig);
@@ -150,9 +163,9 @@ public class AccountUpdateToolTest {
    */
   @Test
   public void testCreateAccount() throws Exception {
-    assertEquals("Wrong number of accounts", 0, accountService.getAllAccounts().size());
+    assertEquals("Wrong number of accounts", DUMMY_ACCOUNT_OFFSET, accountService.getAllAccounts().size());
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
-    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT + DUMMY_ACCOUNT_OFFSET, accountService);
   }
 
   /**
@@ -163,7 +176,7 @@ public class AccountUpdateToolTest {
   public void testUpdateAccount() throws Exception {
     // first, create NUM_REF_ACCOUNT accounts through the tool
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
-    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT + DUMMY_ACCOUNT_OFFSET, accountService);
 
     // then, update the name of all the accounts again through the tool
     String accountNameAppendix = "-accountNameAppendix";
@@ -178,7 +191,7 @@ public class AccountUpdateToolTest {
       updatedAccounts.add(accountBuilder.build());
     }
     createOrUpdateAccountsAndWait(updatedAccounts);
-    assertAccountsInAccountService(updatedAccounts, NUM_REF_ACCOUNT, accountService);
+    assertAccountsInAccountService(updatedAccounts, NUM_REF_ACCOUNT + DUMMY_ACCOUNT_OFFSET, accountService);
   }
 
   /**
@@ -190,7 +203,7 @@ public class AccountUpdateToolTest {
   public void testUpdateAccountSmallerSnapshotVersion() throws Exception {
     // first, create NUM_REF_ACCOUNT accounts through the tool
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
-    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT + DUMMY_ACCOUNT_OFFSET, accountService);
 
     // then, update the name of all the accounts but make the snapshot version smaller than current number.
     String accountNameAppendix = "-accountNameAppendix";
@@ -202,7 +215,7 @@ public class AccountUpdateToolTest {
       updatedAccounts.add(accountBuilder.build());
     }
     updateAccountsWithSmallerSnapshotVersionAndWait(updatedAccounts);
-    assertAccountsInAccountService(updatedAccounts, NUM_REF_ACCOUNT, accountService);
+    assertAccountsInAccountService(updatedAccounts, NUM_REF_ACCOUNT + DUMMY_ACCOUNT_OFFSET, accountService);
   }
 
   /**
@@ -218,7 +231,8 @@ public class AccountUpdateToolTest {
     TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(idConflictAccounts),
         null);
     Thread.sleep(100);
-    assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
+    assertEquals("Wrong number of accounts in accountService", DUMMY_ACCOUNT_OFFSET,
+        accountService.getAllAccounts().size());
 
     // name conflict
     Collection<Account> nameConflictAccounts = new ArrayList<>();
@@ -227,7 +241,8 @@ public class AccountUpdateToolTest {
     TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(nameConflictAccounts),
         null);
     Thread.sleep(100);
-    assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
+    assertEquals("Wrong number of accounts in accountService", DUMMY_ACCOUNT_OFFSET,
+        accountService.getAllAccounts().size());
   }
 
   /**
@@ -247,7 +262,8 @@ public class AccountUpdateToolTest {
       // expected
     }
     Thread.sleep(100);
-    assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
+    assertEquals("Wrong number of accounts in accountService", DUMMY_ACCOUNT_OFFSET,
+        accountService.getAllAccounts().size());
   }
 
   /**
@@ -302,6 +318,27 @@ public class AccountUpdateToolTest {
    */
   private static void writeAccountsToFile(Collection<Account> accounts, String filePath) throws Exception {
     Files.write(Paths.get(filePath), new ObjectMapper().writeValueAsBytes(accounts));
+  }
+
+  /**
+   * Seed ZooKeeper with a single dummy account+container at the legacy account-metadata path so
+   * {@link HelixAccountServiceFactory#getAccountService()} can pass its non-empty-cache check on startup.
+   * Uses the same ZNRecord layout {@link LegacyMetadataStore} writes: path {@code /account_metadata/full_data},
+   * map field {@code accountMetadata} keyed by accountId → account JSON. Tests that count accounts in the service
+   * must include this dummy ({@link #DUMMY_ACCOUNT_OFFSET}).
+   */
+  private void seedDummyAccountInZk() throws Exception {
+    Container dummyContainer =
+        new ContainerBuilder((short) 1, "dummyContainer", Container.ContainerStatus.ACTIVE, "dummyContainer",
+            DUMMY_ACCOUNT_ID).build();
+    Account dummyAccount = new AccountBuilder(DUMMY_ACCOUNT_ID, "dummyAccount", Account.AccountStatus.ACTIVE)
+        .containers(java.util.Collections.singleton(dummyContainer)).build();
+    String accountJson = new ObjectMapper().writeValueAsString(dummyAccount);
+    ZNRecord record = new ZNRecord("full_account_metadata");
+    Map<String, String> accountMap = new HashMap<>();
+    accountMap.put(String.valueOf(dummyAccount.getId()), accountJson);
+    record.setMapField(LegacyMetadataStore.ACCOUNT_METADATA_MAP_KEY, accountMap);
+    storeOperator.write(LegacyMetadataStore.FULL_ACCOUNT_METADATA_PATH, record);
   }
 
   /**

@@ -17,6 +17,7 @@ package com.github.ambry.server.storagestats;
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -48,6 +49,7 @@ import java.util.stream.Collectors;
  *     }
  * }
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class HostAccountStorageStats {
   @JsonIgnore
   private Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = new HashMap<>();

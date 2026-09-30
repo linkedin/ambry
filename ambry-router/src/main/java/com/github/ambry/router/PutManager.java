@@ -227,17 +227,20 @@ class PutManager {
     long startTime = time.milliseconds();
     requestRegistrationCallback.setRequestsToSend(requestsToSend);
     requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
-    for (PutOperation op : putOperations) {
-      try {
-        op.poll(requestRegistrationCallback);
-      } catch (Exception e) {
-        op.setOperationExceptionAndComplete(
-            new RouterException("Put poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
-      }
-      if (op.isOperationComplete() && putOperations.remove(op)) {
-        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
-        // operation actually gets removed from the set of operations. See comment within closePendingOperations().
-        onComplete(op);
+    // Iterating allocates a KeyIterator even when the set is empty; skip when no ops are in flight.
+    if (!putOperations.isEmpty()) {
+      for (PutOperation op : putOperations) {
+        try {
+          op.poll(requestRegistrationCallback);
+        } catch (Exception e) {
+          op.setOperationExceptionAndComplete(
+              new RouterException("Put poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
+        }
+        if (op.isOperationComplete() && putOperations.remove(op)) {
+          // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+          // operation actually gets removed from the set of operations. See comment within closePendingOperations().
+          onComplete(op);
+        }
       }
     }
     routerMetrics.putManagerPollTimeMs.update(time.milliseconds() - startTime);

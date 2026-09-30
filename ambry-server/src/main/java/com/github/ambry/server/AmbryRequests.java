@@ -117,6 +117,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -158,7 +159,7 @@ public class AmbryRequests implements RequestAPI {
   protected final MetricRegistry metricRegistry;
   protected final ServerConfig serverConfig;
   protected ThreadLocal<Transformer> transformer;
-  private final ObjectMapper objectMapper = new ObjectMapper();
+  private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
@@ -1174,9 +1175,11 @@ public class AmbryRequests implements RequestAPI {
           // Blob might have been replicated while we were force deleting it. Try normal delete now
           store.delete(Collections.singletonList(info));
         } catch (StoreException ex) {
+          logger.error("Force-delete fallback delete failed for blob {}", info.getStoreKey().getID(), ex);
           serverErrorCode = ErrorMapping.getStoreErrorMapping(ex.getErrorCode());
         }
       } else {
+        logger.error("Force-delete failed for blob {}", info.getStoreKey().getID(), e);
         serverErrorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
     }
@@ -2518,6 +2521,30 @@ public class AmbryRequests implements RequestAPI {
           requestTotalTimeHistogram = metrics.forceDeleteRequestTotalTimeInMs;
           if (isRequestDropped) {
             metrics.forceDeleteDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case UpdateReplicationPriority:
+          metrics.updateReplicationPriorityRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.updateReplicationPriorityRequestRate.mark();
+          metrics.updateReplicationPriorityRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.updateReplicationPriorityResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.updateReplicationPriorityResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.updateReplicationPriorityRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.updateReplicationPriorityDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case ListReplicationPriority:
+          metrics.listReplicationPriorityRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.listReplicationPriorityRequestRate.mark();
+          metrics.listReplicationPriorityRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.listReplicationPriorityResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.listReplicationPriorityResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.listReplicationPriorityRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.listReplicationPriorityDroppedRate.mark();
             metrics.totalRequestDroppedRate.mark();
           }
           break;

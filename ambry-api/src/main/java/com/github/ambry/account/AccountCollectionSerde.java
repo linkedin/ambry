@@ -18,6 +18,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.github.ambry.frontend.Operations;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collection;
@@ -34,7 +35,7 @@ import java.util.stream.Collectors;
 public class AccountCollectionSerde {
   private static final String ACCOUNTS_KEY = Operations.ACCOUNTS;
   private static final ObjectMapper objectMapper =
-      new ObjectMapper().configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
+      JsonUtil.newObjectMapper().configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true);
 
   // Use a mix in class to remove containers from serialized bytes
   @JsonIgnoreProperties({"containers"})
@@ -42,7 +43,7 @@ public class AccountCollectionSerde {
   }
 
   private static final ObjectMapper objectMapperWithoutContainer =
-      new ObjectMapper().configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true)
+      JsonUtil.newObjectMapper().configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, true)
           .addMixIn(Account.class, AccountMixIn.class);
 
   /**

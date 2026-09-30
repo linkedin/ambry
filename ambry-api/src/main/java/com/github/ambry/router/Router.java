@@ -152,6 +152,21 @@ public interface Router extends Closeable {
     return future;
   }
 
+  /**
+   * Variant that accepts a {@link RestRequest} so the router can resolve a named-blob path
+   * (e.g. {@code /named/{account}/{container}/{name}}) via {@code IdConverter} before the storage GET.
+   * Use the {@code String}-only overload when the caller already has a resolved blob ID.
+   * <p/>
+   * After {@code IdConverter} resolves named-blob metadata, implementations may translate a subsequent
+   * {@link RouterErrorCode#BlobDoesNotExist} from storage to {@link RouterErrorCode#AmbryUnavailable}
+   * (retryable 503) — once metadata says the blob exists, a missing storage response is treated as transient.
+   * @param restRequest used to invoke {@code IdConverter} for named-blob paths.
+   * @param blobId blob ID, or a named-blob path when {@code restRequest} is non-null.
+   * @param options request options.
+   * @param callback invoked on completion.
+   * @param quotaChargeCallback for quota accounting.
+   * @return future containing the {@link GetBlobResult} or an exception.
+   */
   default Future<GetBlobResult> getBlob(RestRequest restRequest, String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
       QuotaChargeCallback quotaChargeCallback) {
     return getBlob(blobId, options, callback, quotaChargeCallback);

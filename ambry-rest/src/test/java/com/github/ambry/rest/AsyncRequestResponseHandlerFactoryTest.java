@@ -51,6 +51,8 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // Get request handler.
     RestRequestHandler restRequestHandler = handlerFactory.getRestRequestHandler();
+    assertTrue("The production request handler should expose request-size classification",
+        restRequestHandler instanceof RestRequestMetricsClassifier);
     assertNotNull("No RestRequestHandler returned", restRequestHandler);
     assertEquals("Did not receive an AsyncRequestResponseHandler instance",
         AsyncRequestResponseHandler.class.getCanonicalName(), restRequestHandler.getClass().getCanonicalName());

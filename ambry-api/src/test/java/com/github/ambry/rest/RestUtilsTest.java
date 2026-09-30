@@ -1006,31 +1006,36 @@ public class RestUtilsTest {
     for (String operation : operations) {
       for (RestMethod method : methods) {
         JSONObject header = new JSONObject();
-        header.put(RestUtils.InternalKeys.REQUEST_PATH,
-            RequestPath.parse("/" + operation, Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
+        RequestPath requestPath =
+            RequestPath.parse("/" + operation, Collections.emptyMap(), Collections.emptyList(), "ambry-test");
+        header.put(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
         RestRequest request = createRestRequest(method, "/" + operation, header);
-        boolean isUpload = RestUtils.isUploadRequest(request);
-        assertEquals(operation.equals(Operations.NAMED_BLOB) && method == RestMethod.PUT, isUpload);
+        boolean expected = operation.equals(Operations.NAMED_BLOB) && method == RestMethod.PUT;
+        assertEquals(expected, RestUtils.isUploadRequest(request));
+        assertEquals(expected, RestUtils.isUploadRequest(request, requestPath));
       }
     }
     // One exception for PUT named blob
     {
       JSONObject header = new JSONObject();
-      header.put(RestUtils.InternalKeys.REQUEST_PATH,
-          RequestPath.parse("/" + Operations.NAMED_BLOB, Collections.emptyMap(), Collections.emptyList(),
-              "ambry-test"));
+      RequestPath requestPath =
+          RequestPath.parse("/" + Operations.NAMED_BLOB, Collections.emptyMap(), Collections.emptyList(), "ambry-test");
+      header.put(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
       header.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, "STITCH");
       RestRequest request = createRestRequest(RestMethod.PUT, "/" + Operations.NAMED_BLOB, header);
       assertFalse(RestUtils.isUploadRequest(request));
+      assertFalse(RestUtils.isUploadRequest(request, requestPath));
     }
 
     for (RestMethod method : methods) {
       JSONObject header = new JSONObject();
-      header.put(RestUtils.InternalKeys.REQUEST_PATH,
-          RequestPath.parse("/", Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
+      RequestPath requestPath =
+          RequestPath.parse("/", Collections.emptyMap(), Collections.emptyList(), "ambry-test");
+      header.put(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
       RestRequest request = createRestRequest(method, "/", header);
-      boolean isUpload = RestUtils.isUploadRequest(request);
-      assertEquals(method == RestMethod.POST, isUpload);
+      boolean expected = method == RestMethod.POST;
+      assertEquals(expected, RestUtils.isUploadRequest(request));
+      assertEquals(expected, RestUtils.isUploadRequest(request, requestPath));
     }
   }
 

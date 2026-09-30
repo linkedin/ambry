@@ -677,6 +677,14 @@ public class UtilsTest {
     assertFalse("Should not be declared as a client termination", Utils.isPossibleClientTermination(exception));
     exception = new SSLException("SSLEngine closed already");
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
+
+    exception = new IOException(Utils.CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG, new java.nio.channels.ClosedChannelException());
+    assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
+
+    // bare ClosedChannelException has no message — should NOT match
+    exception = new java.nio.channels.ClosedChannelException();
+    assertFalse("Bare ClosedChannelException should not be declared as a client termination",
+        Utils.isPossibleClientTermination(exception));
   }
 
   /**

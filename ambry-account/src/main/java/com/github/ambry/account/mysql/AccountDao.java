@@ -21,6 +21,7 @@ import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -39,7 +40,7 @@ import static com.github.ambry.utils.Utils.*;
 public class AccountDao {
 
   private final MySqlDataAccessor dataAccessor;
-  private final ObjectMapper objectMapper = new ObjectMapper();
+  private final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   // Account table fields
   public static final String ACCOUNT_TABLE = "Accounts";

@@ -146,6 +146,15 @@ public enum RestServiceErrorCode {
   ServiceUnavailable,
 
   /**
+   * Indicates the request was rejected by the host-level throttler. Maps to HTTP 503 like
+   * {@link #ServiceUnavailable}, but is tracked under a separate metric counter
+   * ({@code NettyResponseChannel.HostLevelThrottledCount}) so SLO dashboards / alerts that key on
+   * {@code NettyResponseChannel.ServiceUnavailableErrorCount} (host-down / crash / shutdown signal)
+   * are not polluted by throttler-driven drops.
+   */
+  HostLevelThrottled,
+
+  /**
    * Application rate limit exceeded/Application quota limit exceeded.
    */
   TooManyRequests,

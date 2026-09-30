@@ -596,6 +596,9 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     stitchBlobAndVerify(account, container, idsAndContent.getFirst(), idsAndContent.getSecond(), 217);
     idsAndContent = uploadDataChunksAndVerify(account, container, FRONTEND_CONFIG.chunkUploadMaxChunkTtlSecs, 167);
     stitchBlobAndVerify(account, container, idsAndContent.getFirst(), idsAndContent.getSecond(), 167);
+    // verify chunk uploads without part number header (backward compatibility)
+    idsAndContent = uploadDataChunksAndVerify(account, container, null, false, 50, 50, 17);
+    stitchBlobAndVerify(account, container, idsAndContent.getFirst(), idsAndContent.getSecond(), 117);
   }
 
   /**
@@ -755,6 +758,11 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
    */
   private Pair<List<String>, byte[]> uploadDataChunksAndVerify(Account account, Container container, Long chunkBlobTtl,
       int... chunkSizes) throws Exception {
+    return uploadDataChunksAndVerify(account, container, chunkBlobTtl, true, chunkSizes);
+  }
+
+  private Pair<List<String>, byte[]> uploadDataChunksAndVerify(Account account, Container container, Long chunkBlobTtl,
+      boolean includePartNumbers, int... chunkSizes) throws Exception {
     IdSigningService idSigningService = new AmbryIdSigningService();
     HttpHeaders chunkUploadHeaders = new DefaultHttpHeaders();
     chunkUploadHeaders.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
@@ -776,11 +784,17 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     List<String> signedChunkIds = new ArrayList<>();
     ByteArrayOutputStream fullContentStream = new ByteArrayOutputStream();
     URI uri = new URI(signedPostUrl);
-    for (int chunkSize : chunkSizes) {
+    for (int i = 0; i < chunkSizes.length; i++) {
+      int chunkSize = chunkSizes[i];
       byte[] contentArray = TestUtils.getRandomBytes(chunkSize);
       ByteBuffer content = ByteBuffer.wrap(contentArray);
-      // Use signed URL to POST
-      httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
+      // Use signed URL to POST, optionally with part number header (1-based)
+      HttpHeaders perChunkHeaders = null;
+      if (includePartNumbers) {
+        perChunkHeaders = new DefaultHttpHeaders();
+        perChunkHeaders.add(RestUtils.Headers.PART_NUMBER, i + 1);
+      }
+      httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), perChunkHeaders, content);
       responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
       String signedId = verifyPostAndReturnBlobId(responseParts, chunkSize, false);
       assertTrue("Blob ID for chunk upload must be signed", idSigningService.isIdSigned(signedId.substring(1)));
@@ -791,6 +805,13 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
       String blobSize = idAndMetadata.getSecond().get(RestUtils.Headers.BLOB_SIZE);
       assertNotNull("x-ambry-blob-size should be present in signed ID", blobSize);
       assertEquals("wrong size value in signed id", content.capacity(), Long.parseLong(blobSize));
+      String partNum = idAndMetadata.getSecond().get(RestUtils.Headers.PART_NUMBER);
+      if (includePartNumbers) {
+        assertNotNull("x-ambry-part-number should be present in signed ID", partNum);
+        assertEquals("wrong part number in signed id", i + 1, Integer.parseInt(partNum));
+      } else {
+        assertNull("x-ambry-part-number should not be present when not sent", partNum);
+      }
       HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(chunkUploadHeaders);
       // Use signed ID and blob ID for GET request
       expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, content.capacity());

@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -171,7 +172,7 @@ public class MessageInfoTest {
    */
   @Test
   public void testJsonSerialization() throws Exception {
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new MockIdFactory());
     short accountId = 100, containerId = 1000;
     StoreKey key = new MockId(TestUtils.getRandomString(10), accountId, containerId);

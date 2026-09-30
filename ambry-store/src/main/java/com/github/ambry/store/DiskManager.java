@@ -607,10 +607,20 @@ public class DiskManager {
         succeed = true;
       }
     } catch (Exception e) {
-      stores.remove(replica.getPartitionId());
+      BlobStore store = stores.remove(replica.getPartitionId());
       partitionToReplicaMap.remove(replica.getPartitionId());
       logger.error("Failed to load new added store {} or add requirements to disk allocator", replica.getPartitionId(),
           e);
+      // If store.load() succeeded before the failure, gauges were already registered. Shut down the store to
+      // deregister them. Without this, orphaned gauge lambda closures accumulate in the MetricRegistry (and the
+      // JMX MBeanRegistrar that wraps it), holding strong references to PersistentIndex objects and preventing GC.
+      if (store != null && store.isStarted()) {
+        try {
+          store.shutdown();
+        } catch (Exception shutdownException) {
+          logger.error("Failed to shut down store {} after failed load", replica.getPartitionId(), shutdownException);
+        }
+      }
     } finally {
       rwLock.writeLock().unlock();
     }

@@ -33,6 +33,7 @@ import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -427,7 +428,7 @@ public class FrontendIntegrationTestBase {
       verifyTrackingHeaders(response);
       int contentLength = response.headers().getInt(HttpHeaderNames.CONTENT_LENGTH);
       byte[] responseContentArray = getContent(responseParts.queue, contentLength).array();
-      ObjectMapper objectMapper = new ObjectMapper();
+      ObjectMapper objectMapper = JsonUtil.newObjectMapper();
       ListNamedBlobResponse listResponse = objectMapper.readValue(responseContentArray, ListNamedBlobResponse.class);
       assertEquals("Named blob entry number don't match", expectedReturnNumber, listResponse.entries.size());
       nextPageToken = listResponse.getNextPageToken();

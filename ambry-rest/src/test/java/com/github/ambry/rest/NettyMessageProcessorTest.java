@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
@@ -21,20 +22,32 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.ContainerMetrics;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.notification.UpdateType;
+import com.github.ambry.rest.RestRequestMetricsClassifier.RequestSizeCategory;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.TestUtils;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.channel.local.LocalAddress;
+import io.netty.channel.local.LocalChannel;
+import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpContent;
@@ -57,9 +70,11 @@ import io.netty.handler.codec.http.multipart.HttpDataFactory;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -69,6 +84,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Test;
 
@@ -81,9 +97,11 @@ import static org.junit.Assert.*;
  * Unit tests for {@link NettyMessageProcessor}.
  */
 public class NettyMessageProcessorTest {
+  private static final String CONTAINER_METRIC_PREFIX =
+      ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
   private final InMemoryRouter router;
   private final RestRequestService restRequestService;
-  private final MockRestRequestResponseHandler requestHandler;
+  private final ClassifyingRestRequestResponseHandler requestHandler;
   private final HelperNotificationSystem notificationSystem = new HelperNotificationSystem();
 
   private static final AtomicLong REQUEST_ID_GENERATOR = new AtomicLong(0);
@@ -91,6 +109,9 @@ public class NettyMessageProcessorTest {
   private static final NettyConfig NETTY_CONFIG = new NettyConfig(new VerifiableProperties(new Properties()));
   private static final PerformanceConfig PERFORMANCE_CONFIG =
       new PerformanceConfig(new VerifiableProperties(new Properties()));
+  // Minimum time a request is held in flight before it is terminated, so that the recorded duration is provably
+  // non-zero rather than merely non-negative.
+  private static final long MIN_IN_FLIGHT_MS = 2;
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -102,7 +123,7 @@ public class NettyMessageProcessorTest {
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties, notificationSystem, new MockClusterMap(), null);
     restRequestService = new MockRestRequestService(verifiableProperties, router);
-    requestHandler = new MockRestRequestResponseHandler(restRequestService);
+    requestHandler = new ClassifyingRestRequestResponseHandler(restRequestService);
     restRequestService.setupResponseHandler(requestHandler);
     restRequestService.start();
     requestHandler.start();
@@ -490,8 +511,542 @@ public class NettyMessageProcessorTest {
     compareContent(receivedContent, Collections.singletonList(content));
   }
 
+  /**
+   * Tests that a failed 100-Continue response write records one client abort, termination duration, and whole-blob
+   * size sample even though the interim response channel has already completed.
+   */
+  @Test
+  public void testContinueResponseWriteFailureRecordsClientAbortOnce() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    ContainerMetrics containerMetrics =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    Properties properties = new Properties();
+    properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
+    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
+    AtomicLong classificationCount = new AtomicLong();
+    class ContinueRequestHandler implements RestRequestHandler, RestRequestMetricsClassifier {
+      @Override
+      public void start() {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
+          throws RestServiceException {
+        restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+        restResponseChannel.setStatus(ResponseStatus.Continue);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        restResponseChannel.onResponseComplete(null);
+      }
+
+      @Override
+      public RequestSizeCategory classifyRequestSize(RestRequest restRequest) {
+        classificationCount.incrementAndGet();
+        return RequestSizeCategory.WHOLE_BLOB;
+      }
+    }
+    RestRequestHandler continueRequestHandler = new ContinueRequestHandler();
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, nettyConfig, PERFORMANCE_CONFIG, continueRequestHandler);
+    EmbeddedChannel channel =
+        new EmbeddedChannel(new PublicAccessLogHandler(new MockPublicAccessLogger(new String[0], new String[0], false),
+            nettyMetrics), new FailingContinueWriteHandler(), new ChunkedWriteHandler(), processor);
+    try {
+      HttpHeaders headers = new DefaultHttpHeaders();
+      headers.set(EXPECT, CONTINUE);
+      HttpRequest httpRequest =
+          RestTestUtils.createRequest(HttpMethod.PUT, "/s3/account/container/blob", headers);
+      httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "continueWriteFailureTest");
+      httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      httpRequest.headers().set(RestUtils.Headers.BLOB_SIZE, 4096);
+
+      channel.writeInbound(httpRequest);
+      channel.runPendingTasks();
+
+      assertEquals("The failed continue write should record one client abort", 1,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("The continue response should not enter the server-error abort subset", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount").getCount());
+      assertEquals("The failed continue write should record the termination duration exactly once", 1,
+          nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("The failed continue write should classify the request exactly once", 1,
+          classificationCount.get());
+      assertEquals("The failed continue write should record one bytes-received sample", 1,
+          nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+      assertEquals("No request body should have arrived before the failed continue write", 0,
+          nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getSnapshot().getMin());
+      assertEquals("The failed continue write should record one declared-size sample", 1,
+          nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+      assertEquals("The declared whole-blob size should come from the request header", 4096,
+          nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getSnapshot().getMin());
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  /**
+   * Tests that a request still in flight when the channel goes inactive is recorded in
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} with the time it had been in flight for, and not in the
+   * idle histogram.
+   */
+  @Test
+  public void testAbortedRequestRecordsTimeInFlight() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      long testStartMs = System.currentTimeMillis();
+      fixture.sendOpenRequest();
+      assertEquals("Nothing should have been recorded while the request is still in flight", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      awaitClockAdvance(MIN_IN_FLIGHT_MS);
+
+      fixture.client.close().sync();
+      fixture.awaitServerCloseAndDrain();
+
+      assertFalse("A remote close must not be marked as server initiated",
+          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertFalse("A remote close must not be classified as a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("Termination of the in-flight request should have been recorded exactly once", 1,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("A client termination should not also be recorded as an idle termination", 0,
+          fixture.nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("The remote close should record one per-container client abort", 1,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("The 400-classified remote close should not enter the server-error abort subset", 0,
+          fixture.metricRegistry.getCounters()
+              .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
+              .getCount());
+      assertEquals("A remote close should record the whole-blob bytes-received sample", 1,
+          fixture.nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+      assertEquals("A remote close should record the declared whole-blob size sample", 1,
+          fixture.nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+      assertRecordedTimeInFlight(fixture.nettyMetrics.clientTerminatedRequestTimeInMs, testStartMs);
+    }
+  }
+
+  /**
+   * Tests that a server-initiated close still cleans up an open request but is not attributed to the remote client.
+   */
+  @Test
+  public void testServerInitiatedCloseDoesNotRecordClientAbort() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      fixture.sendOpenRequest();
+
+      fixture.server().close().sync();
+      fixture.awaitServerCloseAndDrain();
+
+      assertTrue("The outbound close should be marked as server initiated",
+          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertTrue("The outbound close should be classified as a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("A server close should not record a client-termination duration", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("A server close should not record a client abort", 0,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("A server close should not enter the server-error abort subset", 0,
+          fixture.metricRegistry.getCounters()
+              .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
+              .getCount());
+      assertEquals("A server close should not record a whole-blob bytes-received sample", 0,
+          fixture.nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+      assertEquals("A server close should not record a declared whole-blob size sample", 0,
+          fixture.nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+    }
+  }
+
+  /**
+   * Tests that event-loop shutdown is not attributed to the client even though Netty's unsafe close bypasses outbound
+   * handlers and therefore cannot set the normal close marker.
+   */
+  @Test
+  public void testServiceShutdownDoesNotRecordClientAbort() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      fixture.sendOpenRequest();
+      fixture.markServiceDown();
+
+      fixture.closeServerWithoutPipeline();
+      fixture.awaitServerCloseAndDrain();
+
+      assertFalse("The unsafe shutdown close should bypass the outbound close marker",
+          PublicAccessLogHandler.isServerCloseInitiated(fixture.server()));
+      assertTrue("Service-down state should still identify a server termination",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("Service shutdown should not record a client-termination duration", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("Service shutdown should not record a client abort", 0,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertEquals("Service shutdown should not enter the server-error abort subset", 0,
+          fixture.metricRegistry.getCounters()
+              .get(CONTAINER_METRIC_PREFIX + "ServerErrorClientAbortCount")
+              .getCount());
+      assertEquals("Service shutdown should not record a whole-blob bytes-received sample", 0,
+          fixture.nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+      assertEquals("Service shutdown should not record a declared whole-blob size sample", 0,
+          fixture.nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+    }
+  }
+
+  /**
+   * Tests that a request still in flight when the channel is closed for being idle is recorded in
+   * {@link NettyMetrics#idleTerminatedRequestTimeInMs}, since an idle timeout aborts the longest-lived requests and
+   * would otherwise be missing from the distribution. It is kept separate from
+   * {@link NettyMetrics#clientTerminatedRequestTimeInMs} because the two have different causes: an idle termination is
+   * the server enforcing its own timeout, and so cannot be observed sooner than that timeout, whereas a client
+   * termination can happen at any point. Pooling them would inject a floor at the idle timeout into a distribution
+   * whose signal is at the low end.
+   */
+  @Test
+  public void testIdleChannelAbortRecordsTimeInFlight() {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    long testStartMs = System.currentTimeMillis();
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+    awaitClockAdvance(MIN_IN_FLIGHT_MS);
+
+    channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
+
+    assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+    assertEquals("An idle termination should not also be recorded as a client termination", 0,
+        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    assertRecordedTimeInFlight(nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
+  }
+
+  /**
+   * Tests that an idle timeout does not enter the client-termination size distributions.
+   */
+  @Test
+  public void testIdleUploadDoesNotRecordClientTerminationSizes() {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    requestHandler.setRequestSizeCategory(RequestSizeCategory.WHOLE_BLOB);
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    HttpRequest postRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+    postRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+    postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "testIdleUploadDoesNotRecordClientTerminationSizes");
+    postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, 4096);
+    channel.writeInbound(postRequest);
+    channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(TestUtils.getRandomBytes(1024))));
+
+    channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
+
+    assertEquals("The idle timeout should have been recorded in its own duration histogram", 1,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+    assertEquals("An idle timeout should not enter the client-disconnect bytes-received distribution", 0,
+        nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+    assertEquals("An idle timeout should not enter the client-disconnect declared-size distribution", 0,
+        nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+  }
+
+  /**
+   * Tests that an idle timeout abort records the time the request was in flight for on a real event loop, where
+   * {@code fireChannelInactive} is deferred to a later task and the request is already closed by the time
+   * {@link NettyMessageProcessor#channelInactive} runs. {@link EmbeddedChannel} runs that task inline and so cannot
+   * exercise this ordering.
+   */
+  @Test
+  public void testIdleChannelAbortOnRealEventLoopRecordsTimeInFlight() throws Exception {
+    try (RealChannelFixture fixture = new RealChannelFixture()) {
+      long testStartMs = System.currentTimeMillis();
+      fixture.sendOpenRequest();
+      awaitClockAdvance(MIN_IN_FLIGHT_MS);
+
+      fixture.server()
+          .eventLoop()
+          .submit(() -> fixture.server().pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT))
+          .sync();
+      fixture.awaitServerCloseAndDrain();
+
+      assertTrue("The idle timeout should close the channel through the outbound server path",
+          PublicAccessLogHandler.isServerTermination(fixture.server()));
+      assertEquals("Termination of the idle in-flight request should have been recorded exactly once", 1,
+          fixture.nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("The deferred channelInactive should not double record the same termination", 0,
+          fixture.nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("An idle timeout should not record a client abort", 0,
+          fixture.metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+      assertRecordedTimeInFlight(fixture.nettyMetrics.idleTerminatedRequestTimeInMs, testStartMs);
+    }
+  }
+
+  /**
+   * Tests that an idle timeout remains the sole termination cause when failing the in-progress response invokes the
+   * response-write listener.
+   */
+  @Test
+   public void testIdleDuringStreamingResponseDoesNotRecordClientAbort() throws Exception {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    ContainerMetrics containerMetrics =
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    CountDownLatch responseStarted = new CountDownLatch(1);
+    RestRequestHandler streamingRequestHandler = new RestRequestHandler() {
+      @Override
+      public void start() {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+        restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+        restResponseChannel.write(ByteBuffer.allocate(1), null);
+        responseStarted.countDown();
+      }
+    };
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, streamingRequestHandler);
+    EmbeddedChannel channel =
+        new EmbeddedChannel(new PublicAccessLogHandler(
+            new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics),
+            new ChunkedWriteHandler(), processor);
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
+      assertTrue("The response should have started synchronously", responseStarted.await(5, TimeUnit.SECONDS));
+
+      channel.pipeline().fireUserEventTriggered(IdleStateEvent.ALL_IDLE_STATE_EVENT);
+
+      assertEquals("The idle timeout should record exactly one duration", 1,
+          nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+      assertEquals("Failing the streaming response should not also record a client duration", 0,
+          nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      assertEquals("An idle timeout should not record a client abort", 0,
+          metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  /**
+   * Tests that closing a channel with no request in flight records nothing.
+   */
+  @Test
+  public void testInactiveChannelWithNoRequestInFlightRecordsNothing() {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    channel.close().awaitUninterruptibly();
+
+    assertEquals("A channel that never carried a request should record nothing", 0,
+        nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+    assertEquals("A channel that never carried a request should record no idle termination either", 0,
+        nettyMetrics.idleTerminatedRequestTimeInMs.getCount());
+  }
+
+  /**
+   * Tests that an upload aborted mid-flight records both how far the client got and the size it declared, so that the
+   * sizes of aborted uploads can be compared against the sizes of successful ones.
+   */
+  @Test
+  public void testAbortedUploadRecordsSizes() {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    requestHandler.setRequestSizeCategory(RequestSizeCategory.WHOLE_BLOB);
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    // The client declares a blob larger than what it goes on to send, i.e. it gives up part way through.
+    long declaredSizeBytes = 4096;
+    byte[] sentContent = TestUtils.getRandomBytes(1024);
+    HttpRequest postRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+    postRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+    postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "testAbortedUploadRecordsSizes");
+    postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, declaredSizeBytes);
+    channel.writeInbound(postRequest);
+    assertEquals("Classification should not run while the upload is still active", 0,
+        requestHandler.getClassificationCount());
+    channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(sentContent)));
+    assertEquals("Receiving upload content should not classify a request that has not terminated", 0,
+        requestHandler.getClassificationCount());
+
+    channel.close().awaitUninterruptibly();
+
+    assertEquals("An aborted request should be classified exactly once", 1, requestHandler.getClassificationCount());
+    assertEquals("Bytes received by the aborted upload should have been recorded exactly once", 1,
+        nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+    assertEquals("Bytes received should be what the client actually sent before giving up", sentContent.length,
+        nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getSnapshot().getMin());
+    assertEquals("The size declared by the aborted upload should have been recorded exactly once", 1,
+        nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+    assertEquals("Declared size should be the whole blob size, not the number of bytes that arrived",
+        declaredSizeBytes, nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getSnapshot().getMin());
+  }
+
+  /**
+   * Tests that an upload that declares no size at all records only the bytes that were received. A chunked upload that
+   * sends neither {@code x-ambry-blob-size} nor {@code Content-Length} has no size to record, and recording the
+   * {@code -1} that represents it would corrupt the distribution.
+   */
+  @Test
+  public void testAbortedUploadWithoutDeclaredSizeRecordsOnlyBytesReceived() {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    requestHandler.setRequestSizeCategory(RequestSizeCategory.WHOLE_BLOB);
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    byte[] sentContent = TestUtils.getRandomBytes(1024);
+    // No x-ambry-blob-size and no Content-Length, i.e. the client never said how large the blob would be.
+    HttpRequest postRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+    postRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+    postRequest.headers()
+        .set(RestUtils.Headers.SERVICE_ID, "testAbortedUploadWithoutDeclaredSizeRecordsOnlyBytesReceived");
+    channel.writeInbound(postRequest);
+    channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(sentContent)));
+
+    channel.close().awaitUninterruptibly();
+
+    assertEquals("Bytes received should still be recorded when no size was declared", 1,
+        nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+    assertEquals("Bytes received should be what the client actually sent before giving up", sentContent.length,
+        nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getSnapshot().getMin());
+    assertEquals("An undeclared size should not be recorded at all", 0,
+        nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+  }
+
+  /**
+   * Tests that an aborted multipart upload records the bytes that arrived on the wire. {@link NettyMultipartRequest}
+   * only sets the blob bytes it received once a complete blob part has been decoded, which happens after the whole
+   * request has been buffered, so an aborted multipart upload has no decoded blob part and would report zero blob bytes
+   * received. The bytes received by the request as a whole are counted as content arrives and so survive the abort.
+   */
+  @Test
+  public void testAbortedMultipartUploadRecordsBytesReceived() throws Exception {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    long bytesSent = abortMultipartUpload(nettyMetrics, null);
+
+    assertEquals("Bytes received by the aborted multipart upload should have been recorded exactly once", 1,
+        nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+    assertEquals("Bytes received should be the bytes that arrived, not the zero blob bytes that were decoded",
+        bytesSent, nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getSnapshot().getMin());
+    assertEquals("A multipart envelope length should not be recorded as the declared whole-blob size", 0,
+        nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+  }
+
+  /**
+   * Tests that an explicit blob size on a multipart upload is recorded rather than discarded with the MIME envelope
+   * length.
+   */
+  @Test
+  public void testAbortedMultipartUploadRecordsExplicitBlobSize() throws Exception {
+    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+    long declaredBlobSize = 256;
+    abortMultipartUpload(nettyMetrics, declaredBlobSize);
+
+    assertEquals("An explicit multipart blob size should have been recorded exactly once", 1,
+        nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+    assertEquals("The explicit blob size should be recorded without MIME framing overhead", declaredBlobSize,
+        nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getSnapshot().getMin());
+  }
+
+  /**
+   * Tests that chunk, multipart-part, and non-blob requests do not enter the whole-blob size distributions.
+   */
+  @Test
+  public void testNonWholeBlobRequestsDoNotRecordSizes() {
+    RequestSizeCategory[] excludedCategories =
+        {RequestSizeCategory.CHUNK, RequestSizeCategory.MULTIPART_PART, RequestSizeCategory.OTHER};
+    for (RequestSizeCategory category : excludedCategories) {
+      NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+      requestHandler.setRequestSizeCategory(category);
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest postRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+      postRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "testNonWholeBlobRequestsDoNotRecordSizes");
+      postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, 4096);
+      channel.writeInbound(postRequest);
+      channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(TestUtils.getRandomBytes(1024))));
+      channel.close().awaitUninterruptibly();
+
+      assertEquals(category + " requests should not record request bytes in the whole-blob distribution", 0,
+          nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+      assertEquals(category + " requests should not record a declared whole-blob size", 0,
+          nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+    }
+  }
+
+  /**
+   * Tests that a broken classifier cannot suppress termination accounting or admit size samples.
+   */
+  @Test
+  public void testInvalidClassifierResultRecordsNoSizes() {
+    for (boolean throwException : new boolean[]{false, true}) {
+      NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
+      if (throwException) {
+        requestHandler.setClassificationException(new IllegalStateException("classification failed"));
+      } else {
+        requestHandler.setRequestSizeCategory(null);
+      }
+      NettyMessageProcessor processor =
+          new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+      EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+      HttpRequest postRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+      postRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "testInvalidClassifierResultRecordsNoSizes");
+      postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, 4096);
+      channel.writeInbound(postRequest);
+      channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(TestUtils.getRandomBytes(1024))));
+      channel.close().awaitUninterruptibly();
+
+      assertEquals("An invalid classifier result should disable received-size sampling", 0,
+          nettyMetrics.clientTerminatedWholeBlobRequestBytesReceived.getCount());
+      assertEquals("An invalid classifier result should disable declared-size sampling", 0,
+          nettyMetrics.clientTerminatedDeclaredWholeBlobSizeInBytes.getCount());
+      assertEquals("An invalid classifier result should not suppress the termination duration", 1,
+          nettyMetrics.clientTerminatedRequestTimeInMs.getCount());
+      requestHandler.setRequestSizeCategory(RequestSizeCategory.OTHER);
+    }
+  }
+
   // helpers
   // general
+
+  /**
+   * Busy waits until {@link System#currentTimeMillis()} has advanced by at least {@code durationMs}. Used instead of
+   * {@link Thread#sleep(long)}, which cannot return early but is disallowed for test synchronization.
+   * @param durationMs the number of ms the clock must advance by.
+   */
+  private static void awaitClockAdvance(long durationMs) {
+    long deadlineMs = System.currentTimeMillis() + durationMs;
+    while (System.currentTimeMillis() < deadlineMs) {
+      Thread.yield();
+    }
+  }
+
+  /**
+   * Asserts that the single time in flight recorded in {@code histogram} is bounded below by
+   * {@link #MIN_IN_FLIGHT_MS} and above by the time the test itself has taken. The upper bound is what
+   * distinguishes an elapsed time from a wall clock timestamp.
+   * @param histogram the {@link Histogram} the value was recorded in.
+   * @param testStartMs the value of {@link System#currentTimeMillis()} from before the request was sent.
+   */
+  private static void assertRecordedTimeInFlight(Histogram histogram, long testStartMs) {
+    long recordedMs = histogram.getSnapshot().getMin();
+    long testDurationMs = System.currentTimeMillis() - testStartMs;
+    assertTrue("Time in flight " + recordedMs + " ms should be at least the " + MIN_IN_FLIGHT_MS
+        + " ms the request was held for", recordedMs >= MIN_IN_FLIGHT_MS);
+    assertTrue("Time in flight " + recordedMs + " ms should not exceed the " + testDurationMs
+        + " ms the test has taken", recordedMs <= testDurationMs);
+  }
 
   /**
    * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link NettyMessageProcessor}.
@@ -633,6 +1188,37 @@ public class NettyMessageProcessorTest {
     return encoder;
   }
 
+  private long abortMultipartUpload(NettyMetrics nettyMetrics, Long declaredBlobSize) throws Exception {
+    requestHandler.setRequestSizeCategory(RequestSizeCategory.WHOLE_BLOB);
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), processor);
+
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(256));
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+    httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "abortMultipartUpload");
+    if (declaredBlobSize != null) {
+      httpRequest.headers().set(RestUtils.Headers.BLOB_SIZE, declaredBlobSize);
+    }
+    HttpPostRequestEncoder encoder = createEncoder(httpRequest, content);
+    HttpRequest finalizedRequest = encoder.finalizeRequest();
+    if (declaredBlobSize == null) {
+      HttpUtil.setTransferEncodingChunked(finalizedRequest, false);
+      HttpUtil.setContentLength(finalizedRequest, 1024);
+    }
+    channel.writeInbound(finalizedRequest);
+    // Only the first chunk is sent, so the blob part is never completed and the request is left in flight.
+    long bytesSent = 0;
+    if (!encoder.isEndOfInput()) {
+      HttpContent chunk = encoder.readChunk(PooledByteBufAllocator.DEFAULT);
+      bytesSent = chunk.content().readableBytes();
+      channel.writeInbound(chunk);
+    }
+    assertTrue("The test needs to send content before aborting the upload", bytesSent > 0);
+    channel.close().awaitUninterruptibly();
+    return bytesSent;
+  }
+
   // requestHandlerExceptionTest() helpers.
 
   /**
@@ -648,6 +1234,39 @@ public class NettyMessageProcessorTest {
     // first outbound has to be response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", expectedStatus, response.status());
+  }
+
+  private static class ClassifyingRestRequestResponseHandler extends MockRestRequestResponseHandler
+      implements RestRequestMetricsClassifier {
+    private RequestSizeCategory requestSizeCategory = RequestSizeCategory.OTHER;
+    private RuntimeException classificationException;
+    private int classificationCount;
+
+    ClassifyingRestRequestResponseHandler(RestRequestService restRequestService) {
+      super(restRequestService);
+    }
+
+    @Override
+    public RequestSizeCategory classifyRequestSize(RestRequest restRequest) {
+      classificationCount++;
+      if (classificationException != null) {
+        throw classificationException;
+      }
+      return requestSizeCategory;
+    }
+
+    void setRequestSizeCategory(RequestSizeCategory requestSizeCategory) {
+      this.requestSizeCategory = requestSizeCategory;
+      classificationException = null;
+    }
+
+    void setClassificationException(RuntimeException classificationException) {
+      this.classificationException = classificationException;
+    }
+
+    int getClassificationCount() {
+      return classificationCount;
+    }
   }
 
   /**
@@ -772,4 +1391,135 @@ public class NettyMessageProcessorTest {
       }
     }
   }
+
+  /**
+   * Fails the 100-Continue write through its promise, matching an asynchronous response-write failure.
+   */
+  private static class FailingContinueWriteHandler extends ChannelOutboundHandlerAdapter {
+    @Override
+    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+      if (msg instanceof FullHttpResponse && ((FullHttpResponse) msg).status().equals(HttpResponseStatus.CONTINUE)) {
+        ReferenceCountUtil.release(msg);
+        promise.setFailure(new ClosedChannelException());
+      } else {
+        ctx.write(msg, promise);
+      }
+    }
+  }
+
+  /**
+   * Holds a request open after injecting the container metrics used by the termination tests.
+   */
+  private static class HoldingRequestHandler implements RestRequestHandler, RestRequestMetricsClassifier {
+    private final ContainerMetrics containerMetrics;
+    private final CountDownLatch requestHandled;
+
+    HoldingRequestHandler(ContainerMetrics containerMetrics, CountDownLatch requestHandled) {
+      this.containerMetrics = containerMetrics;
+      this.requestHandled = requestHandled;
+    }
+
+    @Override
+    public void start() {
+    }
+
+    @Override
+    public void shutdown() {
+    }
+
+    @Override
+    public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+      restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+      requestHandled.countDown();
+    }
+
+    @Override
+    public RequestSizeCategory classifyRequestSize(RestRequest restRequest) {
+      return RequestSizeCategory.WHOLE_BLOB;
+    }
+  }
+
+  /**
+   * Production-shaped local transport used to distinguish remote close from outbound server close.
+   */
+  private static class RealChannelFixture implements AutoCloseable {
+    private final MetricRegistry metricRegistry = new MetricRegistry();
+    private final NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
+    private final RestServerState restServerState = new RestServerState("/healthCheck");
+    private final EventLoopGroup group = new DefaultEventLoopGroup(1);
+    private final AtomicReference<Channel> serverChannel = new AtomicReference<>();
+    private final CountDownLatch serverInitialized = new CountDownLatch(1);
+    private final CountDownLatch requestHandled = new CountDownLatch(1);
+    private final Channel listener;
+    private final Channel client;
+
+    RealChannelFixture() throws Exception {
+      RestRequestMetricsTracker.setDefaults(metricRegistry);
+      restServerState.markServiceUp();
+      ContainerMetrics containerMetrics =
+          new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+      HoldingRequestHandler requestHandler = new HoldingRequestHandler(containerMetrics, requestHandled);
+      LocalAddress address = new LocalAddress("client-abort-" + REQUEST_ID_GENERATOR.incrementAndGet());
+      listener = new ServerBootstrap().group(group)
+          .channel(LocalServerChannel.class)
+          .childHandler(new ChannelInitializer<LocalChannel>() {
+            @Override
+            protected void initChannel(LocalChannel channel) {
+              channel.pipeline()
+                  .addLast(new PublicAccessLogHandler(
+                      new MockPublicAccessLogger(new String[0], new String[0], false), nettyMetrics, restServerState))
+                  .addLast(new ChunkedWriteHandler())
+                  .addLast(new NettyMessageProcessor(nettyMetrics, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler));
+              serverChannel.set(channel);
+              serverInitialized.countDown();
+            }
+          })
+          .bind(address)
+          .sync()
+          .channel();
+      client = new Bootstrap().group(group)
+          .channel(LocalChannel.class)
+          .handler(new ChannelInboundHandlerAdapter())
+          .connect(address)
+          .sync()
+          .channel();
+      assertTrue("Server child channel should have initialized", serverInitialized.await(5, TimeUnit.SECONDS));
+    }
+
+    void sendOpenRequest() throws Exception {
+      HttpRequest request = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
+      request.headers().set(RestUtils.Headers.BLOB_SIZE, 4096);
+      HttpUtil.setKeepAlive(request, true);
+      client.writeAndFlush(request).sync();
+      assertTrue("Request handler should have received the request", requestHandled.await(5, TimeUnit.SECONDS));
+    }
+
+    Channel server() {
+      return serverChannel.get();
+    }
+
+    void markServiceDown() {
+      restServerState.markServiceDown();
+    }
+
+    void closeServerWithoutPipeline() throws Exception {
+      server().eventLoop().submit(() -> server().unsafe().close(server().voidPromise())).sync();
+    }
+
+    void awaitServerCloseAndDrain() throws Exception {
+      assertTrue("Server side channel should have closed", server().closeFuture().await(5, TimeUnit.SECONDS));
+      server().eventLoop().submit(() -> {
+      }).sync();
+      server().eventLoop().submit(() -> {
+      }).sync();
+    }
+
+    @Override
+    public void close() throws Exception {
+      client.close().awaitUninterruptibly();
+      listener.close().awaitUninterruptibly();
+      group.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+    }
+  }
+
 }

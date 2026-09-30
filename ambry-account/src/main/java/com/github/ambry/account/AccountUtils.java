@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -34,7 +35,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AccountUtils {
   private static final Logger logger = LoggerFactory.getLogger(AccountUtils.class);
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   /**
    * Checks if there are duplicate accountId or accountName in the given collection of {@link Account}s.

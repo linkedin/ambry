@@ -14,8 +14,10 @@
 package com.github.ambry.account;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class RampControl {
   public static final String SECONDARY_ENABLED_KEY = "secondaryEnabled";
   @JsonProperty(SECONDARY_ENABLED_KEY)

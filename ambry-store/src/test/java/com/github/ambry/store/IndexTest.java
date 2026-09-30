@@ -20,6 +20,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -92,7 +93,7 @@ public class IndexTest {
   private final short persistentIndexVersion;
   private final boolean addUndeletes;
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private static final Logger logger = LoggerFactory.getLogger(IndexTest.class);
 
   // TODO: test that verifies that files with "_index" are not picked up if the corresponding log segment is not in log

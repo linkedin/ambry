@@ -33,6 +33,7 @@ import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingBiConsumer;
 import java.util.Properties;
@@ -51,7 +52,7 @@ public class GetStatsReportHandlerTest {
   private final String CLUSTER_NAME = "ambry-test";
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
   private final GetStatsReportHandler handler;
-  private final ObjectMapper mapper = new ObjectMapper();
+  private final ObjectMapper mapper = JsonUtil.newObjectMapper();
   private final AccountStatsStore accountStatsStore;
 
   public GetStatsReportHandlerTest() {

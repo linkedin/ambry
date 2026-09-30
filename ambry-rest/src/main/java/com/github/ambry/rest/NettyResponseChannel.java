@@ -47,6 +47,7 @@ import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
@@ -90,6 +91,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private final ChunkedWriteHandler chunkedWriteHandler;
   private final PerformanceConfig perfConfig;
   private final NettyConfig nettyConfig;
+  private final ClientTerminationRecorder clientTerminationRecorder;
 
   private static final Logger logger = LoggerFactory.getLogger(NettyResponseChannel.class);
   private final HttpResponse responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
@@ -114,6 +116,10 @@ class NettyResponseChannel implements RestResponseChannel {
   // temp variable to hold the error response status which will be overwritten on responseStatus if the error response
   // was successfully sent
   private ResponseStatus errorResponseStatus = null;
+  // set alongside errorResponseStatus in getErrorResponse() when the 503 being built is a host-level-throttled
+  // drop rather than a genuine service-unavailable error, so callers can exclude it the same way
+  // serviceUnavailableErrorCount already does.
+  private boolean errorResponseIsHostLevelThrottled = false;
 
   /**
    * A {@link ChannelFutureListener} that closes the {@link Channel} which is
@@ -143,10 +149,26 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics, PerformanceConfig performanceConfig,
       NettyConfig nettyConfig) {
+    this(ctx, nettyMetrics, performanceConfig, nettyConfig, null);
+  }
+
+  /**
+   * Create an instance of NettyResponseChannel with a shared client-termination recorder.
+   * @param ctx the {@link ChannelHandlerContext} to use.
+   * @param nettyMetrics the {@link NettyMetrics} instance to use.
+   * @param performanceConfig the configuration object to use for performance evaluation.
+   * @param nettyConfig the configuration object to use for netty related config.
+   * @param clientTerminationRecorder records the winning client-termination outcome, or {@code null} to use the
+   *                                  response channel's default duration-only recorder.
+   */
+  NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics, PerformanceConfig performanceConfig,
+      NettyConfig nettyConfig, ClientTerminationRecorder clientTerminationRecorder) {
     this.ctx = ctx;
     this.nettyMetrics = nettyMetrics;
     this.perfConfig = performanceConfig;
     this.nettyConfig = nettyConfig;
+    this.clientTerminationRecorder =
+        clientTerminationRecorder == null ? this::recordClientTerminationMetrics : clientTerminationRecorder;
     chunkedWriteHandler = ctx.pipeline().get(ChunkedWriteHandler.class);
     writeFuture = ctx.newProgressivePromise();
     logger.trace("Instantiated NettyResponseChannel");
@@ -181,17 +203,33 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     if (finalResponseMetadata == null) {
       // If finalResponseMetadata is still null, it indicates channel becomes inactive.
+      Exception writeException;
       if (ctx.channel().isActive()) {
+        // Anomalous: channel is active but response metadata wasn't set. Keep as bare ClosedChannelException
+        // since this is not a confirmed client disconnect.
         logger.warn("Channel should be inactive status. {}", ctx.channel());
         nettyMetrics.channelStatusInconsistentCount.inc();
+        writeException = new ClosedChannelException();
       } else {
+        // The channel is inactive. Record client provenance only when no server termination evidence exists, while
+        // retaining the existing method-specific exception and status mapping below.
         logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed.", ctx.channel());
-        writeFuture.addListener(new CleanupCallback(new ClosedChannelException()));
+        ClosedChannelException closedChannelException = new ClosedChannelException();
+        boolean clientAbortCausedServerError =
+            request != null && request.getRestMethod() != RestMethod.GET && !isServerErrorResponse();
+        recordClientTerminationOnWriteFailure(closedChannelException, clientAbortCausedServerError);
+        writeFuture.addListener(new CleanupCallback(closedChannelException));
+        if (request != null && request.getRestMethod() == RestMethod.GET) {
+          nettyMetrics.clientChannelClosedOnWriteCount.inc();
+          writeException = new IOException(Utils.CLIENT_CHANNEL_CLOSED_EXCEPTION_MSG, closedChannelException);
+        } else {
+          writeException = closedChannelException;
+        }
       }
       FutureResult<Long> future = new FutureResult<Long>();
-      future.done(0L, new ClosedChannelException());
+      future.done(0L, writeException);
       if (callback != null) {
-        callback.onCompletion(0L, new ClosedChannelException());
+        callback.onCompletion(0L, writeException);
       }
       return future;
     }
@@ -466,6 +504,11 @@ class NettyResponseChannel implements RestResponseChannel {
       restRequestMetricsTracker.markUnsatisfied();
       logUnsatisfiedRequest(requestPerfToCheck);
     }
+    if (responseStatus.isServerError()) {
+      // Track 5xx responses via a dedicated per-operation metric (separate from the unsatisfied request count)
+      // so that alerts can be configured specifically on server errors.
+      restRequestMetricsTracker.markServerError();
+    }
     restRequestMetricsTracker.recordMetrics();
   }
 
@@ -554,8 +597,46 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.errorResponseProcessingTimeInMs.update(processingTime);
     } else {
       logger.debug("Could not send error response on channel {}", ctx.channel());
+      // Check the flag *after* the write attempt above, not before: response metadata can be committed
+      // concurrently by a writer on another thread (e.g. a router content-write callback), so reading the flag
+      // before the CAS attempt above is racy and can miss an already-committed response that was in fact
+      // committed by that other writer just before/around our own CAS attempt failed. Reading it here is safe
+      // because by the time maybeWriteResponseMetadata() returns, the flag is guaranteed to be true if *any*
+      // writer (this one or a concurrent one) has ever successfully committed metadata.
+      if (responseMetadataWriteInitiated.get() && isOfflineServiceRequest()) {
+        if (errorResponseStatus == ResponseStatus.InternalServerError) {
+          // response metadata (e.g. a 200) was already committed to the client before this failure occurred, so the
+          // 500 constructed above never reached the wire. internalServerErrorCount was still incremented above,
+          // unconditionally, exactly as before this change. This is purely additive visibility into how often known
+          // offline (e.g. composite router secondary/parity-check) callers hit this already-committed-response case.
+          nettyMetrics.offlineInternalServerErrorOnlyCount.inc();
+        } else if (errorResponseStatus == ResponseStatus.ServiceUnavailable) {
+          if (errorResponseIsHostLevelThrottled) {
+            // same as above, but the drop was host-level-throttled rather than a genuine service-unavailable
+            // failure; tracked separately, matching how hostLevelThrottledCount is kept separate from
+            // serviceUnavailableErrorCount.
+            nettyMetrics.offlineHostLevelThrottledOnlyCount.inc();
+          } else {
+            // same as above, but for a genuine (non-throttler-driven) 503 that never reached the wire.
+            nettyMetrics.offlineServiceUnavailableOnlyCount.inc();
+          }
+        }
+      }
     }
     return responseSent;
+  }
+
+  /**
+   * @return {@code true} if the current request's {@link RestUtils.Headers#SERVICE_ID} matches one of the
+   * configured offline (e.g. composite router secondary/parity-check) service IDs. {@code false} if there is no
+   * current request, no service ID on it, or no offline service IDs are configured.
+   */
+  private boolean isOfflineServiceRequest() {
+    if (request == null || nettyConfig.nettyServerOfflineServiceIds.isEmpty()) {
+      return false;
+    }
+    Object serviceId = request.getArgs().get(RestUtils.Headers.SERVICE_ID);
+    return serviceId != null && nettyConfig.nettyServerOfflineServiceIds.contains(serviceId.toString());
   }
 
   /**
@@ -568,15 +649,29 @@ class NettyResponseChannel implements RestResponseChannel {
     RestServiceErrorCode restServiceErrorCode = null;
     String errReason = null;
     Map<String, String> errHeaders = null;
+    errorResponseIsHostLevelThrottled = false;
     if (cause instanceof RestServiceException) {
       RestServiceException restServiceException = (RestServiceException) cause;
       restServiceErrorCode = restServiceException.getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
-      status = getHttpResponseStatus(errorResponseStatus);
+      if (restServiceErrorCode == RestServiceErrorCode.HostLevelThrottled) {
+        // Throttler drops share the 503 wire status with ServiceUnavailable but get their own
+        // counter so SLO dashboards keyed on ServiceUnavailableErrorCount (host-down / crash /
+        // shutdown signal) aren't polluted by intentional throttler-driven drops. Branching
+        // here skips the ServiceUnavailable counter increment getHttpResponseStatus would do.
+        nettyMetrics.hostLevelThrottledCount.inc();
+        status = HttpResponseStatus.SERVICE_UNAVAILABLE;
+        errorResponseIsHostLevelThrottled = true;
+      } else {
+        status = getHttpResponseStatus(errorResponseStatus);
+      }
       if (shouldSendFailureReason(status, restServiceException)) {
-        errReason = new String(
-            Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
-            StandardCharsets.US_ASCII);
+        String rootMessage = Utils.getRootCause(cause).getMessage();
+        if (rootMessage != null) {
+          errReason = new String(
+              rootMessage.replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
+              StandardCharsets.US_ASCII);
+        }
       }
       if (restServiceException.shouldIncludeExceptionMetadataInResponse()) {
         errHeaders = restServiceException.getExceptionHeadersMap();
@@ -796,9 +891,24 @@ class NettyResponseChannel implements RestResponseChannel {
    *                                 error is propagated through the netty pipeline.
    */
   private void handleChannelWriteFailure(Throwable cause, boolean propagateErrorIfRequired) {
+    handleChannelWriteFailure(cause, propagateErrorIfRequired, false);
+  }
+
+  /**
+   * Handles post-mortem of writes that have failed.
+   * @param cause the cause of the failure.
+   * @param propagateErrorIfRequired if {@code true} and {@code cause} is not an instance of {@link Exception}, the
+   *                                 error is propagated through the netty pipeline.
+   * @param networkWriteFailed {@code true} if an outbound write future supplied {@code cause}.
+   */
+  private void handleChannelWriteFailure(Throwable cause, boolean propagateErrorIfRequired,
+      boolean networkWriteFailed) {
     long writeFailureProcessingStartTime = System.currentTimeMillis();
     try {
       nettyMetrics.channelWriteError.inc();
+      if (networkWriteFailed) {
+        recordClientTerminationOnWriteFailure(cause, false);
+      }
       Exception exception;
       if (!(cause instanceof Exception)) {
         logger.warn("Encountered a throwable on channel write failure", cause);
@@ -820,6 +930,45 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteFailureProcessingTimeInMs.update(
           System.currentTimeMillis() - writeFailureProcessingStartTime);
     }
+  }
+
+  /**
+   * Records a client termination when a network write supplies both the close evidence and an eligible cause.
+   * @param cause the outbound write failure.
+   * @param clientAbortCausedServerError {@code true} if this abort can cause the request's 5xx classification.
+   */
+  private void recordClientTerminationOnWriteFailure(Throwable cause, boolean clientAbortCausedServerError) {
+    boolean clientTermination = request != null && !PublicAccessLogHandler.isServerTermination(ctx.channel())
+        && isClientTerminationWriteFailure(cause);
+    if (clientTermination) {
+      clientTerminationRecorder.record(request, clientAbortCausedServerError);
+    }
+  }
+
+  private void recordClientTerminationMetrics(NettyRequest request, boolean clientAbortCausedServerError) {
+    if (request.getMetricsTracker().markClientAborted(clientAbortCausedServerError)) {
+      nettyMetrics.clientTerminatedRequestTimeInMs.update(request.getMetricsTracker().getTimeSinceRequestReceivedInMs());
+    }
+  }
+
+  @FunctionalInterface
+  interface ClientTerminationRecorder {
+    void record(NettyRequest request, boolean clientAbortCausedServerError);
+  }
+
+  /**
+   * @return {@code true} if the response already represents a server error.
+   */
+  private boolean isServerErrorResponse() {
+    return responseStatus.isServerError() || errorResponseStatus != null && errorResponseStatus.isServerError();
+  }
+
+  /**
+   * @param cause the outbound write failure.
+   * @return {@code true} if {@code cause} is a transport close recognized as a possible client termination.
+   */
+  private static boolean isClientTerminationWriteFailure(Throwable cause) {
+    return cause instanceof ClosedChannelException || Utils.isPossibleClientTermination(cause);
   }
 
   /**
@@ -1090,7 +1239,7 @@ class NettyResponseChannel implements RestResponseChannel {
         logger.trace("Response sending complete on channel {}", ctx.channel());
         completeRequest(request == null || !request.isKeepAlive(), false, true);
       } else {
-        handleChannelWriteFailure(future.cause(), true);
+        handleChannelWriteFailure(future.cause(), true, true);
       }
     }
   }
@@ -1131,7 +1280,7 @@ class NettyResponseChannel implements RestResponseChannel {
           ctx.writeAndFlush(new ChunkDispenser(), writeFuture);
         }
       } else {
-        handleChannelWriteFailure(future.cause(), true);
+        handleChannelWriteFailure(future.cause(), true, true);
       }
       long responseAfterWriteProcessingTime = System.currentTimeMillis() - writeFinishTime;
       long channelWriteTime = writeFinishTime - responseWriteStartTime;
@@ -1157,7 +1306,7 @@ class NettyResponseChannel implements RestResponseChannel {
       if (future.isSuccess()) {
         completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), true, true);
       } else {
-        handleChannelWriteFailure(future.cause(), true);
+        handleChannelWriteFailure(future.cause(), true, true);
       }
       long responseAfterWriteProcessingTime = System.currentTimeMillis() - writeFinishTime;
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);

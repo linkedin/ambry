@@ -100,14 +100,18 @@ public class InMemNamedBlobDb implements NamedBlobDb {
 
     TreeMap<String, List<NamedBlobRow>> allNamedBlobsInContainer = allRecords.get(accountName).get(containerName);
     NavigableMap<String, List<NamedBlobRow>> nextMap;
-    if (pageToken == null) {
+    if (pageToken != null) {
+      nextMap = allNamedBlobsInContainer.tailMap(pageToken, true);
+    } else if (blobNamePrefix != null) {
       nextMap = allNamedBlobsInContainer.tailMap(blobNamePrefix, true);
     } else {
-      nextMap = allNamedBlobsInContainer.tailMap(pageToken, true);
+      // No prefix and no continuation token: iterate all entries. Mirrors MySqlNamedBlobDb's
+      // LIST_ALL_QUERY path which is selected when blobNamePrefix == null.
+      nextMap = allNamedBlobsInContainer;
     }
     int numRecords = 0;
     for (Map.Entry<String, List<NamedBlobRow>> entry : nextMap.entrySet()) {
-      if (!entry.getKey().startsWith(blobNamePrefix)) {
+      if (blobNamePrefix != null && !entry.getKey().startsWith(blobNamePrefix)) {
         break;
       }
 
@@ -213,6 +217,31 @@ public class InMemNamedBlobDb implements NamedBlobDb {
       future.complete(new DeleteResult(blobVersions));
     }
     return future;
+  }
+
+  @Override
+  public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String latestBlob,
+      int maxResults) {
+    // The in-memory implementation is used for tests; it ignores the page size and returns the same result as the
+    // unbounded variant.
+    return pullStaleBlobs(container, latestBlob);
+  }
+
+  @Override
+  public CompletableFuture<String> getFirstBlobName(Container container, String blobNameFrom) {
+    String containerName = container.getName();
+    String first = null;
+    for (String accountName : allRecords.keySet()) {
+      TreeMap<String, List<NamedBlobRow>> rowsPerContainer = allRecords.get(accountName).get(containerName);
+      if (rowsPerContainer == null) {
+        continue;
+      }
+      String candidate = rowsPerContainer.ceilingKey(blobNameFrom);
+      if (candidate != null && (first == null || candidate.compareTo(first) < 0)) {
+        first = candidate;
+      }
+    }
+    return CompletableFuture.completedFuture(first);
   }
 
   @Override

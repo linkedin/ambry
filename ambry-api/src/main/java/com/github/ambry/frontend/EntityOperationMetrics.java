@@ -49,6 +49,13 @@ public class EntityOperationMetrics {
   // 410
   protected final Counter goneCount;
 
+  // Requests whose remote client termination was observed before they completed. These remain counted under their
+  // existing response status as well.
+  protected final Counter clientAbortCount;
+  // The subset of clientAbortCount where the abort caused the request's recorded 5xx classification. This is the only
+  // abort count that can be subtracted from serverErrorCount.
+  protected final Counter serverErrorClientAbortCount;
+
   protected final Counter totalCount;
 
   protected final Histogram throughput;
@@ -80,6 +87,9 @@ public class EntityOperationMetrics {
     forbiddenCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "ForbiddenCount"));
     notFoundCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "NotFoundCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "GoneCount"));
+    clientAbortCount = metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "ClientAbortCount"));
+    serverErrorClientAbortCount =
+        metricRegistry.counter(MetricRegistry.name(ownerClass, metricPrefix + "ServerErrorClientAbortCount"));
     String qpsMetricPrefix = entityName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
     totalCount = metricRegistry.counter(MetricRegistry.name(ownerClass, qpsMetricPrefix + "totalCount"));
 
@@ -121,6 +131,19 @@ public class EntityOperationMetrics {
       }
     } else if (responseStatus.isServerError()) {
       serverErrorCount.inc();
+    }
+  }
+
+  /**
+   * Records a proven remote client termination without changing the request's existing status classification.
+   * @param responseStatus the status already recorded for the request.
+   * @param clientAbortCausedServerError {@code true} if the abort caused a server-error classification rather than
+   *                                     merely occurring while an existing server error was being written.
+   */
+  public void recordClientAbort(ResponseStatus responseStatus, boolean clientAbortCausedServerError) {
+    clientAbortCount.inc();
+    if (clientAbortCausedServerError && responseStatus.isServerError()) {
+      serverErrorClientAbortCount.inc();
     }
   }
 }

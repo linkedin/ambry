@@ -155,20 +155,23 @@ class TtlUpdateManager {
     long startTime = time.milliseconds();
     requestRegistrationCallback.setRequestsToSend(requestsToSend);
     requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
-    for (TtlUpdateOperation op : ttlUpdateOperations) {
-      boolean exceptionEncountered = false;
-      try {
-        op.poll(requestRegistrationCallback);
-      } catch (Exception e) {
-        exceptionEncountered = true;
-        op.setOperationException(
-            new RouterException("TTL poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
-      }
-      if (exceptionEncountered || op.isOperationComplete()) {
-        if (ttlUpdateOperations.remove(op)) {
-          // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
-          // operation actually gets removed from the set of operations. See comment within close().
-          onComplete(op);
+    // Iterating allocates a KeyIterator even when the set is empty; skip when no ops are in flight.
+    if (!ttlUpdateOperations.isEmpty()) {
+      for (TtlUpdateOperation op : ttlUpdateOperations) {
+        boolean exceptionEncountered = false;
+        try {
+          op.poll(requestRegistrationCallback);
+        } catch (Exception e) {
+          exceptionEncountered = true;
+          op.setOperationException(
+              new RouterException("TTL poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
+        }
+        if (exceptionEncountered || op.isOperationComplete()) {
+          if (ttlUpdateOperations.remove(op)) {
+            // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+            // operation actually gets removed from the set of operations. See comment within close().
+            onComplete(op);
+          }
         }
       }
     }

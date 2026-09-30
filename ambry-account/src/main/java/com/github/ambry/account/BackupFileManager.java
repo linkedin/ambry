@@ -17,6 +17,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.HelixAccountServiceConfig;
+import com.github.ambry.utils.JsonUtil;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
@@ -73,7 +74,7 @@ class BackupFileManager {
   static final Pattern newStateFilenamePattern = Pattern.compile("^(\\d{8}T\\d{6})\\." + NEW_STATE_SUFFIX + "$");
 
   private static final Logger logger = LoggerFactory.getLogger(BackupFileManager.class);
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   private final AccountServiceMetrics accountServiceMetrics;
   private final Path backupDirPath;
   private final int maxBackupFileCount;

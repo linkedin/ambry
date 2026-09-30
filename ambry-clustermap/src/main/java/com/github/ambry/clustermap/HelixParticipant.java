@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsStore;
@@ -24,6 +25,7 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,7 +86,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
 
@@ -553,6 +555,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Maintenance record. This is an internal structure in helix. It might be changed with new version of helix controller.
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   static class MaintenanceRecord {
     @JsonProperty("DATE")
     public String date;
@@ -915,6 +918,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    long transitionStartMs = System.currentTimeMillis();
     try {
       if (this.blockStateTransitionLatch != null && this.blockStateTransitionLatch.getCount() > 0) {
         logger.info("Bootstrapping is waiting for blockStateTransitionLatch...");
@@ -960,10 +964,13 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       logger.error("Waiting for state transition to be unblocked was interrupted", e);
     } catch (Exception e) {
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+      participantMetrics.recordBootstrapFailure(partitionName);
       throw e;
     }
     logger.info("Before setting partition {} to bootstrap", partitionName);
     localPartitionAndState.put(partitionName, ReplicaState.BOOTSTRAP);
+    participantMetrics.recordOfflineToBootstrapDuration(System.currentTimeMillis() - transitionStartMs);
+    participantMetrics.recordBootstrapStart(partitionName);
     participantMetrics.decStateTransitionMetric(partitionName, ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP);
   }
 
@@ -989,13 +996,16 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     } catch (InterruptedException e) {
       logger.error("Bootstrap was interrupted on partition {}", partitionName);
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+      participantMetrics.recordBootstrapFailure(partitionName);
       throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
     } catch (StateTransitionException e) {
       logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
+      participantMetrics.recordBootstrapFailure(partitionName);
       throw e;
     }
     localPartitionAndState.put(partitionName, ReplicaState.STANDBY);
+    participantMetrics.recordBootstrapComplete(partitionName);
     participantMetrics.decStateTransitionMetric(partitionName, ReplicaState.BOOTSTRAP, ReplicaState.STANDBY);
   }
 

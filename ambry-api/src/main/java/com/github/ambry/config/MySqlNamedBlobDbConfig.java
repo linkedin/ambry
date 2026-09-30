@@ -27,9 +27,14 @@ public class MySqlNamedBlobDbConfig {
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
+  public static final String MAX_PENDING_TRANSACTIONS_PER_DATACENTER =
+      PREFIX + "max.pending.transactions.per.datacenter";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
+  public static final String STALE_DATA_RETENTION_VERSIONS = PREFIX + "stale.data.retention.versions";
+  public static final String STALE_READY_DATA_RETENTION_DAYS = PREFIX + "stale.ready.data.retention.days";
+  public static final String LIST_QUERY_TIMEOUT_SECONDS = PREFIX + "list.query.timeout.seconds";
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
   public static final String ENABLE_HARD_DELETE = PREFIX + "enable.hard.delete";
@@ -44,7 +49,7 @@ public class MySqlNamedBlobDbConfig {
   @Config(LIST_NAMED_BLOBS_SQL_OPTION)
   public static final int DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION = 2;
   public static final int MIN_LIST_NAMED_BLOBS_SQL_OPTION = 2;
-  public static final int MAX_LIST_NAMED_BLOBS_SQL_OPTION = 3;
+  public static final int MAX_LIST_NAMED_BLOBS_SQL_OPTION = 4;
   public final int listNamedBlobsSQLOption;
 
   /**
@@ -69,6 +74,32 @@ public class MySqlNamedBlobDbConfig {
   public final int remotePoolSize;
 
   /**
+   * Maximum number of in-flight transactions allowed per datacenter (queued plus running). When the per-datacenter
+   * work queue is full, additional submissions are rejected with {@link com.github.ambry.rest.RestServiceErrorCode#ServiceUnavailable}
+   * instead of being enqueued. Bounded admission control protects the JVM from heap exhaustion when the backend
+   * MySQL slows down: each queued task pins a Netty channel and request context, so an unbounded queue can grow
+   * to multi-GB before the kubelet kills the pod.
+   *
+   * <p><b>Default is intentionally non-restrictive.</b> The default of {@link Integer#MAX_VALUE} makes this PR a
+   * no-op for existing deployments — the admission machinery and {@code TransactionExecutorQueueSize.<dc>},
+   * {@code TransactionExecutorActiveCount.<dc>}, {@code NamedBlobTransactionRejectedCount.<dc>}, and
+   * {@code NamedBlobEnqueueWaitTimeInMs.<dc>} metrics are wired up, but {@code AbortPolicy} will not fire under
+   * any realistic load. Operators are expected to observe queue-depth p99 in production and tune this value down
+   * to a per-deployment cap. Order-of-magnitude steady-state heuristic:
+   * {@code 4 * localPoolSize * p99_query_latency_seconds} (typically 20-40 for {@code localPoolSize=5}).
+   *
+   * <p>Once a value below {@link Integer#MAX_VALUE} is set, raise it together with {@link #localPoolSize} when
+   * intentionally provisioning more capacity.
+   */
+  // Default Integer.MAX_VALUE: the per-datacenter queue is INITIALLY UNBOUNDED. The admission control
+  // and per-DC metrics (TransactionExecutorQueueSize/ActiveCount/RejectedCount/EnqueueWaitTimeInMs)
+  // ship in a no-op state so operators can measure the steady-state queue depth in production before
+  // tuning this knob down to a real cap. AbortPolicy does not fire until this is reduced.
+  @Config(MAX_PENDING_TRANSACTIONS_PER_DATACENTER)
+  @Default("2147483647")
+  public final int maxPendingTransactionsPerDatacenter;
+
+  /**
    * The maximum number of entries to return per response page when listing blobs.
    */
   @Config(LIST_MAX_RESULTS)
@@ -83,11 +114,53 @@ public class MySqlNamedBlobDbConfig {
   public final int queryStaleDataMaxResults;
 
   /**
-   * The maximum number of days for a stale blob to say uncleaned.
+   * The maximum age, in days, of a stale <b>IN_PROGRESS</b> (incomplete upload) version to keep during stale-data
+   * cleanup. A superseded IN_PROGRESS version older than this is cleaned up. This governs only IN_PROGRESS versions
+   * (abandoned/failed uploads); superseded completed (READY) versions are governed separately by
+   * {@link #staleReadyDataRetentionDays}. Default 5.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
   @Default("5")
   public final int staleDataRetentionDays;
+
+  /**
+   * The maximum number of most-recent versions to keep per named blob during stale-data cleanup. Superseded (stale)
+   * versions ranked beyond this many newest versions are cleaned up. Must be at least 1 (the current/latest version is
+   * always retained). <p>Defaults to 1, which preserves the legacy keep-only-the-latest-READY behavior so an upgrade
+   * does not change cleanup fleet-wide. A larger value (5 is the recommended target) is meant to be ramped in
+   * per-fabric via config, together with {@link #staleReadyDataRetentionDays}, once the storage/table-growth impact
+   * has been reviewed.
+   */
+  @Config(STALE_DATA_RETENTION_VERSIONS)
+  @Default("1")
+  public final int staleDataRetentionVersions;
+
+  /**
+   * The maximum age, in days, of a superseded (stale) <b>READY</b> (completed) version to keep during stale-data
+   * cleanup. A stale READY version older than this is cleaned up regardless of the version count. The current (latest)
+   * version is always retained regardless of age. This governs only completed (READY) versions -- incomplete
+   * IN_PROGRESS uploads are governed separately by {@link #staleDataRetentionDays}. 0 disables age-based cleanup
+   * (retain stale versions by count only). <p>Defaults to 0 (disabled) so an upgrade preserves the legacy behavior;
+   * an age window (180 is the recommended target) is meant to be ramped in per-fabric via config, together with
+   * {@link #staleDataRetentionVersions}.
+   */
+  @Config(STALE_READY_DATA_RETENTION_DAYS)
+  @Default("0")
+  public final int staleReadyDataRetentionDays;
+
+  /**
+   * Per-statement timeout (in seconds) applied to LIST queries via {@link java.sql.Statement#setQueryTimeout(int)}.
+   * Guards against a LIST scanning an unexpectedly large container: when the budget is exceeded the JDBC driver
+   * issues a clean cancel and the server throws a {@link java.sql.SQLException} (e.g. MySQLTimeoutException),
+   * which surfaces as an ordinary error rather than tearing the socket ("Communications link failure" -> HTTP 500).
+   *
+   * <p><b>Default 0 disables the timeout</b>, making this a no-op for existing deployments. Operators on fabrics
+   * where a network/socket timeout is shorter than the server statement kill should set this just below that
+   * socket timeout so a slow LIST fails fast and cleanly instead of poisoning the connection.
+   */
+  @Config(LIST_QUERY_TIMEOUT_SECONDS)
+  @Default("0")
+  public final int listQueryTimeoutSeconds;
 
   /**
    * Transaction isolation level to be set on DB Connection. When nothing is set, default MySQL DB transaction level
@@ -127,12 +200,21 @@ public class MySqlNamedBlobDbConfig {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
+    this.maxPendingTransactionsPerDatacenter =
+        verifiableProperties.getIntInRange(MAX_PENDING_TRANSACTIONS_PER_DATACENTER, Integer.MAX_VALUE, 1,
+            Integer.MAX_VALUE);
     this.listMaxResults =
         verifiableProperties.getIntInRange(LIST_MAX_RESULTS, DEFAULT_MAX_KEY_VALUE, 1, Integer.MAX_VALUE);
     this.queryStaleDataMaxResults =
         verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
     this.staleDataRetentionDays =
         verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
+    this.staleDataRetentionVersions =
+        verifiableProperties.getIntInRange(STALE_DATA_RETENTION_VERSIONS, 1, 1, Integer.MAX_VALUE);
+    this.staleReadyDataRetentionDays =
+        verifiableProperties.getIntInRange(STALE_READY_DATA_RETENTION_DAYS, 0, 0, Integer.MAX_VALUE);
+    this.listQueryTimeoutSeconds =
+        verifiableProperties.getIntInRange(LIST_QUERY_TIMEOUT_SECONDS, 0, 0, Integer.MAX_VALUE);
     this.transactionIsolationLevel =
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);

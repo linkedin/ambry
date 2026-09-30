@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -57,7 +58,7 @@ public class CloudBlobMetadata {
   // Used for getting system generated last modified time field
   public static final String SYSTEM_GENERATED_FIELD_LAST_UPDATED_TIME = "_ts";
 
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   private String replicaLocation;
 

@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.frontend.ContainerMetrics;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -58,9 +59,19 @@ public class RestRequestMetricsTracker {
   private ContainerMetrics containerMetrics;
   private boolean failed = false;
   private boolean satisfied = true;
+  private boolean serverError = false;
+  private final AtomicReference<RequestTerminationReason> requestTerminationReason =
+      new AtomicReference<>(RequestTerminationReason.NONE);
   private ResponseStatus responseStatus = ResponseStatus.Ok;
 
   private long bytesTransferred = 0;
+
+  private enum RequestTerminationReason {
+    NONE,
+    IDLE_TIMEOUT,
+    CLIENT_ABORT,
+    CLIENT_ABORT_CAUSED_SERVER_ERROR
+  }
 
   /**
    * Tracker for updating NIO related metrics.
@@ -216,6 +227,24 @@ public class RestRequestMetricsTracker {
   }
 
   /**
+   * Marks that the request resulted in a server error (5xx response) so that a metric dedicated to server errors
+   * can be tracked. This is tracked separately from {@link #markUnsatisfied()} so that alerts can be set up on 5xx
+   * responses specifically, without being diluted by requests that are unsatisfied for other reasons (e.g. missed
+   * performance thresholds).
+   */
+  public void markServerError() {
+    serverError = true;
+  }
+
+  /**
+   * Return whether the rest request resulted in a server error (5xx response) or not.
+   * @return {@code true} if the request resulted in a server error.
+   */
+  public boolean isServerError() {
+    return serverError;
+  }
+
+  /**
    * @param responseStatus the {@link ResponseStatus} to be used for certain count metrics.
    */
   public void setResponseStatus(ResponseStatus responseStatus) {
@@ -243,6 +272,26 @@ public class RestRequestMetricsTracker {
 
   public void injectContainerMetrics(ContainerMetrics containerMetrics) {
     this.containerMetrics = containerMetrics;
+  }
+
+  /**
+   * Marks that the server's idle timeout terminated this request.
+   * @return {@code true} if this call claimed the request termination, or {@code false} if another path already did.
+   */
+  public boolean markIdleTimeoutTermination() {
+    return requestTerminationReason.compareAndSet(RequestTerminationReason.NONE,
+        RequestTerminationReason.IDLE_TIMEOUT);
+  }
+
+  /**
+   * Marks that a network boundary observed the remote client terminate this request.
+   * @param clientAbortCausedServerError {@code true} if this abort can cause the request's 5xx classification.
+   * @return {@code true} if this call claimed the request termination, or {@code false} if another path already did.
+   */
+  public boolean markClientAborted(boolean clientAbortCausedServerError) {
+    RequestTerminationReason reason = clientAbortCausedServerError
+        ? RequestTerminationReason.CLIENT_ABORT_CAUSED_SERVER_ERROR : RequestTerminationReason.CLIENT_ABORT;
+    return requestTerminationReason.compareAndSet(RequestTerminationReason.NONE, reason);
   }
 
   // Exposed for test
@@ -276,11 +325,23 @@ public class RestRequestMetricsTracker {
         }
         if (containerMetrics != null) {
           containerMetrics.recordMetrics(nioMetricsTracker.roundTripTimeInMs, responseStatus, bytesTransferred);
+          RequestTerminationReason terminationReason = requestTerminationReason.get();
+          if (terminationReason == RequestTerminationReason.CLIENT_ABORT
+              || terminationReason == RequestTerminationReason.CLIENT_ABORT_CAUSED_SERVER_ERROR) {
+            containerMetrics.recordClientAbort(responseStatus,
+                terminationReason == RequestTerminationReason.CLIENT_ABORT_CAUSED_SERVER_ERROR);
+          }
         }
         if (satisfied) {
           metrics.satisfiedRequestCount.inc();
         } else {
           metrics.unsatisfiedRequestCount.inc();
+        }
+        if (serverError) {
+          metrics.serverErrorCount.inc();
+        }
+        if (responseStatus == ResponseStatus.NotFound) {
+          metrics.notFoundCount.inc();
         }
 
         // Only add throughput metrics when the request is successful and bytes were actually transfered over the wire.
@@ -308,6 +369,15 @@ public class RestRequestMetricsTracker {
    */
   public long getTimeToFirstByteInMs() {
     return nioMetricsTracker.timeToFirstByteInMs;
+  }
+
+  /**
+   * @return time in ms that has elapsed since this request was received, or {@code 0} if it was never marked as
+   *         received.
+   */
+  public long getTimeSinceRequestReceivedInMs() {
+    return nioMetricsTracker.requestReceivedTime == 0 ? 0
+        : System.currentTimeMillis() - nioMetricsTracker.requestReceivedTime;
   }
 
   /**

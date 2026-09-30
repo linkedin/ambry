@@ -322,14 +322,45 @@ public class NonBlockingRouter implements Router {
     if (restRequest != null) {
       idConverter.convert(restRequest, blobIdStr).whenComplete((convertedId, exception) -> {
         if (exception != null) {
-          completeOperation(futureResult, callback, null, (Exception) exception);
+          // Skip decrement: only getBlobHelper increments, and we never reached it.
+          completeOperation(futureResult, callback, null, (Exception) exception, false);
         } else {
-          getBlobHelper(convertedId, options, callback, quotaChargeCallback, futureResult);
+          // Metadata says the blob exists. Translate storage BlobDoesNotExist to
+          // AmbryUnavailable so clients retry (503) instead of getting 404.
+          FutureResult<GetBlobResult> innerFuture = new FutureResult<>();
+          Callback<GetBlobResult> wrappedCallback = (result, e) -> {
+            Exception translated = translateNamedBlobMissingInStorage(convertedId, e);
+            futureResult.done(result, translated);
+            if (callback != null) {
+              callback.onCompletion(result, translated);
+            }
+          };
+          getBlobHelper(convertedId, options, wrappedCallback, quotaChargeCallback, innerFuture);
         }
       });
     }
     // Direct path when blobIdStr is already provided
     return futureResult;
+  }
+
+  /**
+   * Translate {@link RouterErrorCode#BlobDoesNotExist} to {@link RouterErrorCode#AmbryUnavailable}
+   * (retryable 503, not authoritative 404). Other exceptions pass through.
+   */
+  private Exception translateNamedBlobMissingInStorage(String resolvedBlobId, Exception e) {
+    if (e instanceof RouterException
+        && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
+      routerMetrics.namedBlobMetadataExistsButStorageNotFoundCount.inc();
+      if (!routerConfig.routerNamedBlobTranslateNotFoundToUnavailableEnabled) {
+        return e;
+      }
+      logger.warn("Named blob metadata exists but storage returned BlobNotFound for blob {}; "
+          + "translating to AmbryUnavailable (retryable 503)", resolvedBlobId);
+      return new RouterException(
+          "Named blob metadata exists but storage returned BlobNotFound for the resolved blob ID.",
+          RouterErrorCode.AmbryUnavailable);
+    }
+    return e;
   }
 
   private void getBlobHelper(String blobIdStr, GetBlobOptions options, Callback<GetBlobResult> callback,
@@ -778,15 +809,42 @@ public class NonBlockingRouter implements Router {
    */
   void initiateBackgroundDeletes(List<BackgroundDeleteRequest> deleteRequests) {
     for (BackgroundDeleteRequest deleteRequest : deleteRequests) {
+      // Without this guard a malformed request would re-throw every poll cycle, leaving the
+      // backgroundDeleteRequests list never cleared and currentOperationsCount /
+      // currentBackgroundOperationsCount leaking phantom in-flight operations.
+      boolean submitted = false;
+      String blobId = null;
       currentOperationsCount.incrementAndGet();
       currentBackgroundOperationsCount.incrementAndGet();
-      backgroundDeleter.deleteBlob(deleteRequest.getBlobId(), deleteRequest.getServiceId(), new FutureResult<>(),
-          (Void result, Exception exception) -> {
-            if (exception != null) {
-              logger.error("Background delete operation failed with exception", exception);
-            }
-            currentBackgroundOperationsCount.decrementAndGet();
-          }, false, deleteRequest.getQuotaChargeCallback());
+      try {
+        blobId = deleteRequest.getBlobId();
+        // The inline callback below decrements currentBackgroundOperationsCount only when the
+        // delete operation actually completes (success / async failure / timeout). It is wired to
+        // a DeleteOperation that the delete manager registers on the LAST line of
+        // submitDeleteBlobOperation. If deleteBlob throws a RuntimeException before that
+        // registration, the operation is never created and the callback can never fire — both
+        // counters would leak permanently. The finally block below rolls them back in that case.
+        backgroundDeleter.deleteBlob(blobId, deleteRequest.getServiceId(), new FutureResult<>(),
+            (Void result, Exception exception) -> {
+              if (exception != null) {
+                logger.error("Background delete operation failed with exception", exception);
+              }
+              currentBackgroundOperationsCount.decrementAndGet();
+            }, false, deleteRequest.getQuotaChargeCallback());
+        submitted = true;
+      } catch (RuntimeException e) {
+        routerMetrics.backgroundDeleterSubmitFailureCount.inc();
+        logger.error("Skipping malformed background delete request for blobId={}", blobId, e);
+      } finally {
+        // submitted=true means deleteBlob returned without throwing, so either the callback
+        // already fired (RouterException routed via completeOperation) or a DeleteOperation is
+        // registered and the manager's poll loop will fire it. In both cases counter decrement
+        // is the callback's job. submitted=false means we threw before the callback could ever
+        // be reached, so we own the rollback here.
+        if (!submitted) {
+          decrementBackgroundDeleteRouterCounters();
+        }
+      }
     }
   }
 
@@ -812,6 +870,11 @@ public class NonBlockingRouter implements Router {
         List<StoreKey> blobChunkIds = result.getBlobChunkIds();
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(blobChunkIds.size());
         for (StoreKey storeKey : blobChunkIds) {
+          if (storeKey == null) {
+            routerMetrics.backgroundDeleterNullChunkIdCount.inc();
+            logger.error("Skipping null chunk id while initiating background deletes for parent blob {}", blobIdStr);
+            continue;
+          }
           logger.trace("Initiating delete of chunk blob: {}", storeKey);
           deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId, quotaChargeCallback));
         }
@@ -824,6 +887,7 @@ public class NonBlockingRouter implements Router {
       }
       currentBackgroundOperationsCount.decrementAndGet();
     };
+
     currentOperationsCount.incrementAndGet();
     currentBackgroundOperationsCount.incrementAndGet();
     GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
@@ -980,6 +1044,19 @@ public class NonBlockingRouter implements Router {
 
   void incrementOperationsCount(int delta) {
     currentOperationsCount.addAndGet(delta);
+  }
+
+  /**
+   * Roll back the per-request counter increments that {@link #initiateBackgroundDeletes(List)} performs
+   * for a queued background-delete request whose deferred dispatch threw before reaching the
+   * registration that wires the completion callback. Only safe to call from the queued-dispatch path
+   * in {@link OperationController#pollForRequests(List, java.util.Set)} and only when
+   * {@code super.deleteBlob} threw before {@code DeleteManager} registered the operation; otherwise
+   * the async callback would also fire and the counters would underflow.
+   */
+  void decrementBackgroundDeleteRouterCounters() {
+    currentOperationsCount.decrementAndGet();
+    currentBackgroundOperationsCount.decrementAndGet();
   }
 
   /**

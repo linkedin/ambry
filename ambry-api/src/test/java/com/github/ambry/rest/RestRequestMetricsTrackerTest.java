@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.frontend.ContainerMetrics;
 import java.util.Map;
 import java.util.Random;
 import org.junit.Test;
@@ -26,6 +27,44 @@ import static org.junit.Assert.*;
  * Unit tests for {@link RestRequestMetricsTracker}.
  */
 public class RestRequestMetricsTrackerTest {
+
+  @Test
+  public void testNotFoundCountUsesRecordedStatus() {
+    for (ResponseStatus status : ResponseStatus.values()) {
+      for (boolean failed : new boolean[]{false, true}) {
+        for (boolean satisfied : new boolean[]{false, true}) {
+          MetricRegistry registry = new MetricRegistry();
+          RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "GetBlob", registry);
+          RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+          tracker.injectMetrics(metrics);
+          tracker.setResponseStatus(ResponseStatus.NotFound);
+          tracker.setResponseStatus(status);
+          if (failed) {
+            tracker.markFailure();
+          }
+          if (!satisfied) {
+            tracker.markUnsatisfied();
+          }
+          if (status.isServerError()) {
+            tracker.markServerError();
+          }
+          assertSame(metrics.notFoundCount,
+              registry.getCounters().get(MetricRegistry.name(getClass(), "GetBlobNotFoundCount")));
+          assertEquals(0, metrics.notFoundCount.getCount());
+          tracker.recordMetrics();
+          tracker.setResponseStatus(status == ResponseStatus.NotFound ? ResponseStatus.Ok : ResponseStatus.NotFound);
+          tracker.recordMetrics();
+          assertEquals(status.toString(), status == ResponseStatus.NotFound ? 1 : 0, metrics.notFoundCount.getCount());
+          assertEquals(1, metrics.operationCount.getCount());
+          assertEquals(1, metrics.operationRate.getCount());
+          assertEquals(failed ? 1 : 0, metrics.operationError.getCount());
+          assertEquals(satisfied ? 1 : 0, metrics.satisfiedRequestCount.getCount());
+          assertEquals(satisfied ? 0 : 1, metrics.unsatisfiedRequestCount.getCount());
+          assertEquals(status.isServerError() ? 1 : 0, metrics.serverErrorCount.getCount());
+        }
+      }
+    }
+  }
 
   /**
    * Tests the common case uses of {@link RestRequestMetricsTracker} i.e. with and without a custom
@@ -51,6 +90,133 @@ public class RestRequestMetricsTrackerTest {
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
+  }
+
+  /**
+   * Tests that {@link RestRequestMetricsTracker#markServerError()} increments a metric that is separate and
+   * independent from the unsatisfied/satisfied request count metrics tracked via
+   * {@link RestRequestMetricsTracker#markUnsatisfied()}.
+   */
+  @Test
+  public void markServerErrorTest() {
+    // server error marked, request otherwise satisfied (mirrors requests unsatisfied only due to a 5xx response).
+    serverErrorTest(true, true);
+    // server error marked and request also marked unsatisfied (mirrors requests unsatisfied due to 5xx AND missed
+    // thresholds).
+    serverErrorTest(true, false);
+    // no server error, request satisfied.
+    serverErrorTest(false, true);
+    // no server error, request unsatisfied (e.g. missed thresholds on a non-5xx response).
+    serverErrorTest(false, false);
+  }
+
+  /**
+   * Tests recording of the server error metric in combination with the satisfied/unsatisfied request metrics.
+   * @param induceServerError if {@code true}, {@link RestRequestMetricsTracker#markServerError()} is called.
+   * @param satisfied if {@code true}, the request is left in its default satisfied state; if {@code false},
+   *                  {@link RestRequestMetricsTracker#markUnsatisfied()} is called.
+   */
+  private void serverErrorTest(boolean induceServerError, boolean satisfied) {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    String testRequestType = "ServerErrorTest";
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    RestRequestMetrics restRequestMetrics = new RestRequestMetrics(getClass(), testRequestType, metricRegistry);
+    requestMetrics.injectMetrics(restRequestMetrics);
+
+    assertFalse("Request should not be a server error by default", requestMetrics.isServerError());
+    if (induceServerError) {
+      requestMetrics.markServerError();
+    }
+    if (!satisfied) {
+      requestMetrics.markUnsatisfied();
+    }
+    assertEquals("isServerError() does not reflect markServerError() call", induceServerError,
+        requestMetrics.isServerError());
+    assertEquals("isSatisfied() should be unaffected by markServerError()", satisfied, requestMetrics.isSatisfied());
+
+    requestMetrics.recordMetrics();
+
+    String metricPrefix = getClass().getCanonicalName() + "." + testRequestType;
+    long expectedServerErrorCount = induceServerError ? 1 : 0;
+    assertEquals("Server error count metric value is not as expected", expectedServerErrorCount,
+        metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.SERVER_ERROR_COUNT_SUFFIX).getCount());
+    assertEquals("Satisfied request count metric value is not as expected", satisfied ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.SATISFIED_REQUEST_COUNT_SUFFIX).getCount());
+    assertEquals("Unsatisfied request count metric value is not as expected", satisfied ? 0 : 1,
+        metricRegistry.getCounters()
+            .get(metricPrefix + RestRequestMetrics.UNSATISFIED_REQUEST_COUNT_SUFFIX)
+            .getCount());
+  }
+
+  /**
+   * Tests that a client abort is counted separately from its existing status, including the server-error-only subset,
+   * without changing any existing per-container series.
+   */
+  @Test
+  public void testClientAbortCountedSeparatelyFromExistingStatus() {
+    clientAbortTest(ResponseStatus.BadRequest, true, false, 0);
+    clientAbortTest(ResponseStatus.InternalServerError, true, false, 0);
+    clientAbortTest(ResponseStatus.InternalServerError, true, true, 1);
+    clientAbortTest(ResponseStatus.BadRequest, false, false, 0);
+  }
+
+  /**
+   * Tests that idle timeout and client-abort paths share one request-scoped termination winner.
+   */
+  @Test
+  public void testRequestTerminationReasonRecordedOnlyOnce() {
+    RestRequestMetricsTracker idleFirst = new RestRequestMetricsTracker();
+    assertTrue("The idle path should claim an unrecorded termination", idleFirst.markIdleTimeoutTermination());
+    assertFalse("A later client path should not relabel the idle termination", idleFirst.markClientAborted(false));
+
+    RestRequestMetricsTracker clientFirst = new RestRequestMetricsTracker();
+    assertTrue("The client path should claim an unrecorded termination", clientFirst.markClientAborted(false));
+    assertFalse("A later idle path should not relabel the client termination",
+        clientFirst.markIdleTimeoutTermination());
+    assertFalse("A second client path should not record the request again", clientFirst.markClientAborted(true));
+  }
+
+  /**
+   * Records a status against a container, optionally marking it as a client abort, and checks the resulting counters.
+   * @param responseStatus the existing request status.
+   * @param clientAborted if {@code true}, {@link RestRequestMetricsTracker#markClientAborted(boolean)} is called.
+   * @param clientAbortCausedServerError whether the abort caused the request's server-error classification.
+   * @param expectedServerErrorClientAbortCount the expected 5xx abort subset.
+   */
+  private void clientAbortTest(ResponseStatus responseStatus, boolean clientAborted,
+      boolean clientAbortCausedServerError,
+      long expectedServerErrorClientAbortCount) {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    requestMetrics.injectMetrics(new RestRequestMetrics(getClass(), "ClientAbortTest", metricRegistry));
+    requestMetrics.injectContainerMetrics(
+        new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null));
+    requestMetrics.setResponseStatus(responseStatus);
+    if (clientAborted) {
+      assertTrue("The first termination path should mark the request",
+          requestMetrics.markClientAborted(clientAbortCausedServerError));
+      assertFalse("A second termination path should not mark the request again",
+          requestMetrics.markClientAborted(clientAbortCausedServerError));
+    }
+
+    requestMetrics.recordMetrics();
+
+    String metricPrefix = ContainerMetrics.class.getCanonicalName() + ".account___container___PostBlob";
+    assertEquals("Client abort count is not as expected", clientAborted ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ClientAbortCount").getCount());
+    assertEquals("Server-error client abort count is not as expected", expectedServerErrorClientAbortCount,
+        metricRegistry.getCounters().get(metricPrefix + "ServerErrorClientAbortCount").getCount());
+    assertEquals("Bad request count should retain the original status classification",
+        responseStatus == ResponseStatus.BadRequest ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "BadRequestCount").getCount());
+    assertEquals("Client error count should retain the original status classification",
+        responseStatus.isClientError() ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ClientErrorCount").getCount());
+    assertEquals("Server error count should retain the original status classification",
+        responseStatus.isServerError() ? 1 : 0,
+        metricRegistry.getCounters().get(metricPrefix + "ServerErrorCount").getCount());
   }
 
   /**
@@ -80,6 +246,35 @@ public class RestRequestMetricsTrackerTest {
     } catch (IllegalStateException e) {
       // expected. nothing to do.
     }
+  }
+
+  /**
+   * Tests {@link RestRequestMetricsTracker#getTimeSinceRequestReceivedInMs()}. Unlike
+   * {@link RestRequestMetricsTracker.NioMetricsTracker#markFirstByteSent()} and
+   * {@link RestRequestMetricsTracker.NioMetricsTracker#markRequestCompleted()}, it returns {@code 0} rather than
+   * throwing when the request was never marked as received, because its callers are diagnostic paths that must not be
+   * turned into failures.
+   */
+  @Test
+  public void testTimeSinceRequestReceived() {
+    RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
+    assertEquals("Time since request received should be 0 when the request was never marked received", 0,
+        requestMetrics.getTimeSinceRequestReceivedInMs());
+
+    long beforeMs = System.currentTimeMillis();
+    requestMetrics.nioMetricsTracker.markRequestReceived();
+    // Busy wait so that the elapsed time is provably non-zero. Thread.sleep() is not used for test synchronization.
+    long deadlineMs = System.currentTimeMillis() + 2;
+    while (System.currentTimeMillis() < deadlineMs) {
+      Thread.yield();
+    }
+
+    long timeSinceReceivedMs = requestMetrics.getTimeSinceRequestReceivedInMs();
+    assertTrue("Time since request received " + timeSinceReceivedMs + " ms should have advanced past 0",
+        timeSinceReceivedMs > 0);
+    // An elapsed time, unlike a wall clock timestamp, cannot exceed the time this test has been running for.
+    assertTrue("Time since request received " + timeSinceReceivedMs + " ms should not exceed the elapsed test time",
+        timeSinceReceivedMs <= System.currentTimeMillis() - beforeMs);
   }
 
   // commonCaseTest() helpers

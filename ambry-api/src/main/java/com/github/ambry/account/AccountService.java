@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -93,6 +94,40 @@ public interface AccountService extends Closeable {
    * @return A collection of {@link Account}s.
    */
   Collection<Account> getAllAccounts();
+
+  /**
+   * @return the number of accounts currently loaded by this {@code AccountService}. Used by server startup
+   * checks to detect an empty account cache. Implementations may override for efficiency.
+   */
+  default int getAccountCount() {
+    return getAllAccounts().size();
+  }
+
+  /**
+   * @return the total number of containers across all accounts currently loaded by this {@code AccountService}.
+   * Used by server startup checks to detect an empty cache. Implementations may override for efficiency.
+   */
+  default int getContainerCount() {
+    return getAllAccounts().stream().mapToInt(Account::getContainerCount).sum();
+  }
+
+  /**
+   * Fails fast if the account or container cache is empty. Intended to be called once at server startup,
+   * immediately after the initial (synchronous) fetch returns. An empty cache means the remote load failed
+   * and fell through to an empty backup file, which would cause the server to serve incorrect responses
+   * (e.g., rejecting valid requests, skipping valid replication messages).
+   * @throws IllegalStateException if the cache has zero accounts or zero containers.
+   */
+  default void failIfCacheIsEmpty() {
+    int accountCount = getAccountCount();
+    int containerCount = getContainerCount();
+    if (accountCount == 0 || containerCount == 0) {
+      String message = "AccountService cache is empty after initial load (accounts=" + accountCount
+          + ", containers=" + containerCount + ")";
+      LoggerFactory.getLogger(AccountService.class).error(message);
+      throw new IllegalStateException(message);
+    }
+  }
 
   /**
    * Adds a {@link Consumer} for newly created or updated {@link Account}s.

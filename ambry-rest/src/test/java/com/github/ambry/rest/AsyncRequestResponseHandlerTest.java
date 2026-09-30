@@ -24,6 +24,7 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.rest.RestRequestMetricsClassifier.RequestSizeCategory;
 import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -106,6 +107,27 @@ public class AsyncRequestResponseHandlerTest {
       handler.shutdown();
     }
     assertFalse("IsRunning should be false", handler.isRunning());
+  }
+
+  /**
+   * Tests that synchronous request-size classification is delegated to the underlying service.
+   */
+  @Test
+  public void requestSizeClassificationDelegationTest() throws Exception {
+    RestRequest request = createRestRequest(RestMethod.POST, "/", null, null);
+    ClassifyingRestRequestService classifyingService =
+        new ClassifyingRestRequestService(verifiableProperties, router, RequestSizeCategory.WHOLE_BLOB);
+    AsyncRequestResponseHandler classifyingHandler =
+        new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
+            classifyingService);
+    assertEquals("Request-size classification should be delegated synchronously to the request service",
+        RequestSizeCategory.WHOLE_BLOB, classifyingHandler.classifyRequestSize(request));
+
+    AsyncRequestResponseHandler unclassifiedHandler =
+        new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
+            new MockRestRequestService(verifiableProperties, router));
+    assertEquals("A service without a classifier should keep size metrics disabled", RequestSizeCategory.OTHER,
+        unclassifiedHandler.classifyRequestSize(request));
   }
 
   /**
@@ -576,6 +598,22 @@ public class AsyncRequestResponseHandlerTest {
     RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
     RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
     return new AsyncRequestResponseHandler(metrics, requestWorkers, restRequestService);
+  }
+
+  private static class ClassifyingRestRequestService extends MockRestRequestService
+      implements RestRequestMetricsClassifier {
+    private final RequestSizeCategory requestSizeCategory;
+
+    ClassifyingRestRequestService(VerifiableProperties verifiableProperties, Router router,
+        RequestSizeCategory requestSizeCategory) {
+      super(verifiableProperties, router);
+      this.requestSizeCategory = requestSizeCategory;
+    }
+
+    @Override
+    public RequestSizeCategory classifyRequestSize(RestRequest restRequest) {
+      return requestSizeCategory;
+    }
   }
 
   // useWithoutSettingWorkerCountTest() and zeroScalingUnitsTest() helpers

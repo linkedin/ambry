@@ -18,6 +18,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.AccountServiceConfig;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,7 +46,7 @@ import org.slf4j.LoggerFactory;
 public abstract class AbstractAccountService implements AccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(AbstractAccountService.class);
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
   protected final AtomicReference<AccountInfoMap> accountInfoMapRef;

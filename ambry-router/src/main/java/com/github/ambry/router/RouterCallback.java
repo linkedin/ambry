@@ -17,6 +17,8 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.store.StoreKey;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -24,6 +26,7 @@ import java.util.List;
  * router about events and state changes that need attention.
  */
 class RouterCallback {
+  private static final Logger logger = LoggerFactory.getLogger(RouterCallback.class);
   private final NetworkClient networkClient;
   private final List<BackgroundDeleteRequest> backgroundDeleteRequests;
 
@@ -59,6 +62,17 @@ class RouterCallback {
    */
   void scheduleDeletes(List<StoreKey> idsToDelete, String serviceIdSuffix, QuotaChargeCallback quotaChargeCallback) {
     for (StoreKey storeKey : idsToDelete) {
+      if (storeKey == null) {
+        // BackgroundDeleteRequest's constructor throws NPE on a null storeKey. This loop runs from
+        // PutManager.onComplete on every put completion (success and failure paths), where the next
+        // line after this method is nonBlockingRouter.completeOperation. An NPE escaping here would
+        // skip completeOperation, leaving the customer's PUT future never completed — request hangs
+        // until timeout. A null indicates an internal bug in PutOperation chunk-id tracking; we skip
+        // the bad entry, log it, and let the rest of the cleanup proceed so the customer's callback
+        // fires normally.
+        logger.error("Skipping null storeKey in scheduleDeletes (serviceIdSuffix={})", serviceIdSuffix);
+        continue;
+      }
       backgroundDeleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceIdSuffix, quotaChargeCallback));
     }
   }

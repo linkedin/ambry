@@ -21,6 +21,7 @@ import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -83,7 +84,7 @@ public class AccountStatsMySqlStoreTest {
     StatsHeader header =
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, System.currentTimeMillis(), 10, 10, null);
     HostAccountStorageStatsWrapper statsWrapper = new HostAccountStorageStatsWrapper(header, hostAccountStorageStats);
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper = JsonUtil.newObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
     store = new AccountStatsMySqlStore(accountStatsMySqlConfig, mockDataSource, clusterName, hostname, null,
         new MetricRegistry());

@@ -28,6 +28,7 @@ import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
@@ -57,7 +58,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AccountStatsMySqlStore implements AccountStatsStore {
   private static final Logger logger = LoggerFactory.getLogger(AccountStatsMySqlStore.class);
-  private static final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
   public static final String[] TABLES =
       {AccountReportsDao.ACCOUNT_REPORTS_TABLE, AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE,
@@ -252,7 +253,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   private void readStatsFromLocalBackupFile() {
     if (!StringUtils.isEmpty(config.localBackupFilePath)) {
       // load backup file and this backup is the previous stats
-      ObjectMapper objectMapper = new ObjectMapper();
+      ObjectMapper objectMapper = JsonUtil.newObjectMapper();
       try {
         this.previousHostAccountStorageStatsWrapper =
             objectMapper.readValue(new File(config.localBackupFilePath), HostAccountStorageStatsWrapper.class);

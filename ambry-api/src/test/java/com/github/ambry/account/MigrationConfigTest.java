@@ -78,6 +78,68 @@ public class MigrationConfigTest {
     assertTrue(readRamp.isDisableFallbackToPrimary());
   }
 
+  /**
+   * Simulates an old consumer deserializing JSON that contains unknown future fields.
+   * Without @JsonIgnoreProperties(ignoreUnknown = true), this throws UnrecognizedPropertyException.
+   */
+  @Test
+  public void testDeserializationIgnoresUnknownFields() throws Exception {
+    // ReadRamp JSON with an unknown field "someNewReadField"
+    String readRampJson = "{\"forceDisableReadFromSecondary\":false,\"shadowReadMetadataPct\":10.0,"
+        + "\"shadowReadMd5Pct\":0.0,\"shadowReadContentPct\":0.0,\"serveReadFromSecondaryPct\":0.0,"
+        + "\"disableFallbackToPrimary\":false,\"dualHeadSyncPct\":5.0,\"someNewReadField\":99.0}";
+    MigrationConfig.ReadRamp readRamp = objectMapper.readValue(readRampJson, MigrationConfig.ReadRamp.class);
+    assertEquals(10.0, readRamp.getShadowReadMetadataPct(), 0.001);
+    assertEquals(5.0, readRamp.getDualHeadSyncPct(), 0.001);
+
+    // WriteRamp JSON with an unknown field "someNewWriteField"
+    String writeRampJson = "{\"forceDisableDualWriteAndDelete\":false,\"dualWriteAndDeleteAsyncPct\":50.0,"
+        + "\"dualWriteAndDeleteSyncPctNonStrict\":0.0,\"dualWriteAndDeleteSyncPctStrict\":0.0,"
+        + "\"writeAndDeleteOnlyToSecondary\":false,\"someNewWriteField\":true}";
+    MigrationConfig.WriteRamp writeRamp = objectMapper.readValue(writeRampJson, MigrationConfig.WriteRamp.class);
+    assertEquals(50.0, writeRamp.getDualWriteAndDeleteAsyncPct(), 0.001);
+
+    // ListRamp JSON with an unknown field "someNewListField"
+    String listRampJson = "{\"forceDisableListFromSecondary\":false,\"shadowListPct\":30.0,"
+        + "\"serveListFromSecondaryPct\":0.0,\"disableFallbackToPrimary\":false,\"someNewListField\":\"hello\"}";
+    MigrationConfig.ListRamp listRamp = objectMapper.readValue(listRampJson, MigrationConfig.ListRamp.class);
+    assertEquals(30.0, listRamp.getShadowListPct(), 0.001);
+  }
+
+  /**
+   * Forward compatibility: MigrationConfig (outer class) with unknown fields should deserialize successfully.
+   */
+  @Test
+  public void testMigrationConfigIgnoresUnknownFields() throws Exception {
+    String json = "{\"overrideAccountMigrationConfig\":true,"
+        + "\"writeRamp\":{\"forceDisableDualWriteAndDelete\":false,\"dualWriteAndDeleteAsyncPct\":10.0,"
+        + "\"dualWriteAndDeleteSyncPctNonStrict\":0.0,\"dualWriteAndDeleteSyncPctStrict\":0.0,"
+        + "\"writeAndDeleteOnlyToSecondary\":false},"
+        + "\"readRamp\":{\"forceDisableReadFromSecondary\":false,\"shadowReadMetadataPct\":5.0,"
+        + "\"shadowReadMd5Pct\":0.0,\"shadowReadContentPct\":0.0,\"serveReadFromSecondaryPct\":0.0,"
+        + "\"disableFallbackToPrimary\":false,\"dualHeadSyncPct\":0.0},"
+        + "\"listRamp\":{\"forceDisableListFromSecondary\":false,\"shadowListPct\":0.0,"
+        + "\"serveListFromSecondaryPct\":0.0,\"disableFallbackToPrimary\":false},"
+        + "\"someNewTopLevelField\":\"futureValue\"}";
+    MigrationConfig deserialized = objectMapper.readValue(json, MigrationConfig.class);
+    assertTrue(deserialized.isOverrideAccountMigrationConfig());
+    assertEquals(10.0, deserialized.getWriteRamp().getDualWriteAndDeleteAsyncPct(), 0.001);
+    assertEquals(5.0, deserialized.getReadRamp().getShadowReadMetadataPct(), 0.001);
+  }
+
+  /**
+   * Backward compatibility: MigrationConfig with missing optional ramps should deserialize with nulls.
+   */
+  @Test
+  public void testMigrationConfigBackwardCompatibility() throws Exception {
+    String json = "{\"overrideAccountMigrationConfig\":false}";
+    MigrationConfig deserialized = objectMapper.readValue(json, MigrationConfig.class);
+    assertFalse(deserialized.isOverrideAccountMigrationConfig());
+    assertNull(deserialized.getWriteRamp());
+    assertNull(deserialized.getReadRamp());
+    assertNull(deserialized.getListRamp());
+  }
+
   @Test
   public void testDeserializationWithoutDualHeadSyncPct() throws Exception {
     String json = "{\"overrideAccountMigrationConfig\":false,"

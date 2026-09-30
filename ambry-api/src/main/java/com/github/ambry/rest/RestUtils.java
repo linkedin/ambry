@@ -329,6 +329,12 @@ public class RestUtils {
      * chunk upload should be a part of the same session.
      */
     public static final String SESSION = "x-ambry-session";
+    /**
+     * The 1-based part number for a chunk in a stitched upload. When present on a chunk upload request,
+     * this value is captured in the signed chunk ID metadata so that downstream consumers can determine
+     * chunk ordering at upload time rather than waiting for the stitch request.
+     */
+    public static final String PART_NUMBER = "x-ambry-part-number";
 
     /**
      * prefix for any header to be set as user metadata for the given blob
@@ -530,6 +536,12 @@ public class RestUtils {
      * The version for the NamedBlob record in MySQL DB
      */
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
+
+    /**
+     * Set to {@code true} when an infinite named blob TTL is temporarily replaced for the initial router upload.
+     */
+    public static final String NAMED_BLOB_INITIAL_PUT_TTL_TRANSFORMED =
+        KEY_PREFIX + "named-blob-initial-put-ttl-transformed";
 
     /**
      * Boolean field set to "true" if this is a S3 request.
@@ -902,7 +914,16 @@ public class RestUtils {
    * @return
    */
   public static boolean isUploadRequest(RestRequest restRequest) {
-    RequestPath requestPath = RestUtils.getRequestPath(restRequest);
+    return isUploadRequest(restRequest, RestUtils.getRequestPath(restRequest));
+  }
+
+  /**
+   * Return true when the request and already-parsed path represent a blob upload.
+   * @param restRequest the {@link RestRequest}.
+   * @param requestPath the parsed request path.
+   * @return {@code true} if this request uploads a blob.
+   */
+  public static boolean isUploadRequest(RestRequest restRequest, RequestPath requestPath) {
     RestMethod method = restRequest.getRestMethod();
     // For POST request, when the operation is "", it's upload
     // For PUT request, when the operation is named blob, it's named upload upload. However, we have to exclude the

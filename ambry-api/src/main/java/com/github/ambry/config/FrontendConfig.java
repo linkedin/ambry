@@ -50,6 +50,14 @@ public class FrontendConfig {
   public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES =
       PREFIX + "container.metrics.enabled.get.request.types";
   public static final String LIST_MAX_RESULTS = PREFIX + "list.max.results";
+  public static final String NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS =
+      PREFIX + "named.blob.cleanup.container.delay.seconds";
+  public static final String NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS =
+      PREFIX + "named.blob.cleanup.excluded.containers";
+  public static final String NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS =
+      PREFIX + "named.blob.cleanup.excluded.accounts";
+  public static final String NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS =
+      PREFIX + "named.blob.cleanup.initial.delay.max.seconds";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -94,6 +102,55 @@ public class FrontendConfig {
   @Config("frontend.named.blob.cleanup.seconds")
   @Default("60 * 60 * 24 * 7")
   public final int namedBlobCleanupSeconds;
+
+  /**
+   * The optional delay in seconds between eligible containers within one named blob cleanup run. This is separate from
+   * {@link #namedBlobCleanupSeconds}, which controls the interval between full cleanup runs. A value of 0 disables the
+   * inter-container delay.
+   */
+  @Config(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS)
+  @Default("0")
+  public final int namedBlobCleanupContainerDelaySeconds;
+
+  /**
+   * Comma-separated list of containers to exclude from the named blob stale data cleanup process. Each entry is a
+   * fully-qualified {@code "accountName/containerName"}. Excluded containers are skipped entirely by the cleanup
+   * runner, so their superseded (stale) named blob versions are retained rather than deleted. Leading and trailing
+   * whitespace around each comma-separated entry is trimmed, so the list may be written as {@code "a/b, c/d"}. Matching
+   * is otherwise exact, and whitespace <em>within</em> a name is significant (Ambry historically allows whitespace and
+   * other special characters in account and container names), so {@code "my account/my container"} matches verbatim. A
+   * name whose value itself begins or ends with whitespace therefore cannot be expressed via this list and must be
+   * handled out of band. This is a temporary safety valve for consumers that still resolve blobs by internal blob id
+   * and depend on stale versions; the durable fix is to read blobs by name. Defaults to empty (no containers excluded).
+   */
+  @Config(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS)
+  @Default("")
+  public final List<String> namedBlobCleanupExcludedContainers;
+
+  /**
+   * Comma-separated list of accounts to exclude, in their entirety, from the named blob stale data cleanup process.
+   * Each entry is an {@code "accountName"}; every container under a listed account is skipped, so their superseded
+   * (stale) named blob versions are retained rather than deleted. This is the account-level counterpart to
+   * {@link #namedBlobCleanupExcludedContainers}: use it to exempt a whole account instead of naming each container.
+   * The same parsing rules apply -- leading/trailing whitespace around each comma-separated entry is trimmed,
+   * whitespace within a name is significant, and a name that itself begins or ends with whitespace cannot be expressed
+   * here. Defaults to empty (no accounts excluded).
+   */
+  @Config(NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS)
+  @Default("")
+  public final List<String> namedBlobCleanupExcludedAccounts;
+
+  /**
+   * Upper bound (in seconds) on the randomized initial delay before the first named blob cleanup run after startup.
+   * The actual initial delay is a random value in {@code [0, min(namedBlobCleanupSeconds, this))}. This jitters the
+   * first run across pods without letting the initial delay grow to the full cleanup interval: a large initial delay
+   * (previously up to {@link #namedBlobCleanupSeconds}, e.g. 7 days) combined with frequent pod restarts — each
+   * restart re-rolls the delay — can indefinitely postpone the cleanup from ever running. A value of 0 makes the
+   * first run start immediately.
+   */
+  @Config(NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS)
+  @Default("600")
+  public final int namedBlobCleanupInitialDelayMaxSeconds;
 
 
   /**
@@ -323,6 +380,22 @@ public class FrontendConfig {
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
     enableNamedBlobCleanupTask = verifiableProperties.getBoolean("frontend.enable.named.blob.cleanup.task", false);
     namedBlobCleanupSeconds = verifiableProperties.getInt("frontend.named.blob.cleanup.seconds", 60 * 60 * 24 * 7);
+    namedBlobCleanupContainerDelaySeconds =
+        verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_CONTAINER_DELAY_SECONDS, 0, 0, Integer.MAX_VALUE);
+    namedBlobCleanupExcludedContainers =
+        Utils.splitString(verifiableProperties.getString(NAMED_BLOB_CLEANUP_EXCLUDED_CONTAINERS, ""), ",")
+            .stream()
+            .map(String::trim)
+            .filter(entry -> !entry.isEmpty())
+            .collect(Collectors.toList());
+    namedBlobCleanupExcludedAccounts =
+        Utils.splitString(verifiableProperties.getString(NAMED_BLOB_CLEANUP_EXCLUDED_ACCOUNTS, ""), ",")
+            .stream()
+            .map(String::trim)
+            .filter(entry -> !entry.isEmpty())
+            .collect(Collectors.toList());
+    namedBlobCleanupInitialDelayMaxSeconds =
+        verifiableProperties.getIntInRange(NAMED_BLOB_CLEANUP_INITIAL_DELAY_MAX_SECONDS, 600, 0, Integer.MAX_VALUE);
     permanentNamedBlobInitialPutTtl =
         verifiableProperties.getLong("permanent.named.blob.initial.put.ttl", 25 * 60 * 60);
     optionsAllowMethods =

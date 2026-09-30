@@ -25,6 +25,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -157,7 +158,7 @@ public class MySqlStorageUsageRefresherTest {
     Path backupDirPath = Paths.get(properties.getProperty(StorageQuotaConfig.BACKUP_FILE_DIR));
     Path backupFilePath = backupDirPath.resolve(MySqlStorageUsageRefresher.getCurrentMonth());
     Map<String, Map<String, Long>> backupContainerStorageUsages =
-        new ObjectMapper().readValue(backupFilePath.toFile(), new TypeReference<Map<String, Map<String, Long>>>() {
+        JsonUtil.newObjectMapper().readValue(backupFilePath.toFile(), new TypeReference<Map<String, Map<String, Long>>>() {
         });
     assertEquals(
         MySqlStorageUsageRefresher.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false),

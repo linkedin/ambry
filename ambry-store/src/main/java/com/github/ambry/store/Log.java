@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
@@ -50,7 +51,7 @@ class Log implements Write {
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
   private final String storeId;
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper();
 
   private boolean isLogSegmented;
   private LogSegment activeSegment = null;

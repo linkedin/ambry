@@ -13,6 +13,8 @@
  */
 package com.github.ambry.replication;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
@@ -199,6 +201,128 @@ public class ReplicationTest extends ReplicationTestHelper {
     Collections.sort(actualRemoteReplicaInfoList, remoteReplicaInfoComparator);
     remoteReplicaInfoList.remove(remoteReplicaInfoList.size() - 1);
     assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
+  }
+
+  /**
+   * {@link ReplicaThread#prioritizePartitions} must only apply a boost to partitions this thread actually hosts.
+   * A boost on a partition with no local replica on the thread would create a "ghost" entry that never
+   * auto-prunes (see the empty-infos case of {@link ReplicaThread#shouldAutoPrunePriority}), so it must be skipped.
+   */
+  @Test
+  public void prioritizePartitionsSkipsNonHostedPartitionsTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    ReplicaThread replicaThread = buildReplicaThreadForPriorityTest(clusterMap, localHost, remoteHost);
+    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
+
+    // Host exactly one partition on this thread.
+    RemoteReplicaInfo hosted = remoteReplicaInfoList.get(0);
+    replicaThread.addRemoteReplicaInfo(hosted);
+    PartitionId hostedPartition = hosted.getReplicaId().getPartitionId();
+    PartitionId nonHostedPartition = remoteReplicaInfoList.get(1).getReplicaId().getPartitionId();
+    assertNotEquals("test needs two distinct partitions", hostedPartition, nonHostedPartition);
+
+    replicaThread.prioritizePartitions(Arrays.asList(hostedPartition, nonHostedPartition), 5);
+
+    Map<PartitionId, Integer> priorities = replicaThread.listPriorityPartitions();
+    assertEquals("only the hosted partition should be prioritized", Collections.singleton(hostedPartition),
+        priorities.keySet());
+    assertEquals("boost should match", Integer.valueOf(5), priorities.get(hostedPartition));
+  }
+
+  /**
+   * When a thread's last replica of a prioritized partition is removed, the priority entry must be dropped so it
+   * does not linger as an orphan that never auto-prunes (the empty-infos case is intentionally not pruned in the
+   * replication cycle, so cleanup happens here at removal time).
+   */
+  @Test
+  public void removeRemoteReplicaInfoClearsOrphanedPriorityTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    ReplicaThread replicaThread = buildReplicaThreadForPriorityTest(clusterMap, localHost, remoteHost);
+    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
+
+    RemoteReplicaInfo hosted = remoteReplicaInfoList.get(0);
+    replicaThread.addRemoteReplicaInfo(hosted);
+    PartitionId hostedPartition = hosted.getReplicaId().getPartitionId();
+    replicaThread.prioritizePartitions(Collections.singletonList(hostedPartition), 3);
+    assertTrue("priority should be set on the hosted partition",
+        replicaThread.listPriorityPartitions().containsKey(hostedPartition));
+
+    replicaThread.removeRemoteReplicaInfo(hosted);
+    assertFalse("priority must be cleared once the last replica of the partition is removed",
+        replicaThread.listPriorityPartitions().containsKey(hostedPartition));
+  }
+
+  /**
+   * A thread can hold multiple {@link RemoteReplicaInfo}s for the same partition (one per peer). Removing one
+   * must NOT drop the priority while another replica of the partition remains on the thread; only removing the
+   * last one clears it. Exercises the {@code && !hostsPartition(...)} guard in {@code removeRemoteReplicaInfo}.
+   */
+  @Test
+  public void removeRemoteReplicaInfoRetainsPriorityWhileAnotherReplicaRemainsTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    ReplicaThread replicaThread =
+        buildReplicaThreadForPriorityTest(clusterMap, localAndRemoteHosts.getFirst(), localAndRemoteHosts.getSecond());
+
+    // Two peer replicas of the SAME partition on two different remote nodes, both on this thread.
+    PartitionId partition = clusterMap.getWritablePartitionIds(null).get(0);
+    RemoteReplicaInfo peerA = mockRemoteReplicaInfoFor(partition, mock(DataNodeId.class));
+    RemoteReplicaInfo peerB = mockRemoteReplicaInfoFor(partition, mock(DataNodeId.class));
+    replicaThread.addRemoteReplicaInfo(peerA);
+    replicaThread.addRemoteReplicaInfo(peerB);
+
+    replicaThread.prioritizePartitions(Collections.singletonList(partition), 6);
+    assertTrue("priority should be set", replicaThread.listPriorityPartitions().containsKey(partition));
+
+    // Remove one peer: still hosted via the other peer -> priority RETAINED.
+    replicaThread.removeRemoteReplicaInfo(peerA);
+    assertTrue("priority must be retained while another replica of the partition remains on the thread",
+        replicaThread.listPriorityPartitions().containsKey(partition));
+
+    // Remove the last peer: no replica of the partition remains -> priority CLEARED.
+    replicaThread.removeRemoteReplicaInfo(peerB);
+    assertFalse("priority must be cleared after the last replica of the partition is removed",
+        replicaThread.listPriorityPartitions().containsKey(partition));
+  }
+
+  private RemoteReplicaInfo mockRemoteReplicaInfoFor(PartitionId partition, DataNodeId node) {
+    ReplicaId replicaId = mock(ReplicaId.class);
+    when(replicaId.getPartitionId()).thenReturn(partition);
+    when(replicaId.getDataNodeId()).thenReturn(node);
+    RemoteReplicaInfo info = mock(RemoteReplicaInfo.class);
+    when(info.getReplicaId()).thenReturn(replicaId);
+    return info;
+  }
+
+  /**
+   * Builds a bare {@link ReplicaThread} (no replicas added) for the priority unit tests above, mirroring the
+   * construction in {@link #remoteReplicaInfoAddRemoveTest()}.
+   */
+  private ReplicaThread buildReplicaThreadForPriorityTest(MockClusterMap clusterMap, MockHost localHost,
+      MockHost remoteHost) throws Exception {
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+    ReplicationMetrics replicationMetrics =
+        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
+    replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    hosts.put(remoteHost.dataNodeId, remoteHost);
+    FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
+    MockNetworkClient networkClient = new MockNetworkClient(hosts, clusterMap, 4, findTokenHelper);
+    return new ReplicaThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
+        networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+        clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+        new ResponseHandler(clusterMap), time, null, null, null);
   }
 
   /**
@@ -844,6 +968,118 @@ public class ReplicationTest extends ReplicationTestHelper {
     storageManager.shutdown();
 
     replicationConfig = initialReplicationConfig;
+  }
+
+  /**
+   * When a replica transitions STANDBY -> LEADER with both local-DC and remote-DC peers having known
+   * (>= 0) cached lag, each histogram should record the max lag over its own peer class and the
+   * unknown-lag counter should not move.
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsKnownLagTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(100L, 50L, 200L, 250L, 1, 100L, 1, 250L, 0);
+  }
+
+  /**
+   * When every peer (local-DC and remote-DC) is at the -1 sentinel, the unknown-lag counter should
+   * increment exactly once and neither histogram should record.
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsAllUnknownLagTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(-1L, -1L, -1L, -1L, 0, -1L, 0, -1L, 1);
+  }
+
+  /**
+   * When only local-DC peers have known lag (all remote-DC peers unknown), only the local-DC histogram
+   * records; the unknown-lag counter does not move because at least one peer can attest sync state.
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsLocalDcOnlyKnownTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(75L, 125L, -1L, -1L, 1, 125L, 0, -1L, 0);
+  }
+
+  /**
+   * When only remote-DC peers have known lag (all local-DC peers unknown), only the remote-DC histogram
+   * records; the unknown-lag counter does not move.
+   */
+  @Test
+  public void standbyToLeaderPromotionMetricsRemoteDcOnlyKnownTest() throws Exception {
+    runStandbyToLeaderPromotionMetricsTest(-1L, -1L, 300L, 400L, 0, -1L, 1, 400L, 0);
+  }
+
+  /**
+   * Drives one STANDBY -> LEADER promotion with per-peer-class cached lags and asserts histogram/counter
+   * state. Each {@code lag} value of -1 leaves that peer at its default (unknown) value; any other value
+   * is applied via {@link RemoteReplicaInfo#setLocalLagFromRemoteInBytes(long)}. At most two peers per
+   * class are exercised; this is sufficient to validate per-class max selection.
+   * @param localPeerLag1 lag for the first local-DC peer ({@code -1} leaves it unknown)
+   * @param localPeerLag2 lag for the second local-DC peer ({@code -1} leaves it unknown)
+   * @param remotePeerLag1 lag for the first remote-DC peer ({@code -1} leaves it unknown)
+   * @param remotePeerLag2 lag for the second remote-DC peer ({@code -1} leaves it unknown)
+   * @param expectedLocalHistogramCount expected observation count on standbyToLeaderPromotionLocalDcLagBytes
+   * @param expectedLocalHistogramMax expected local-DC histogram max; ignored when count is 0
+   * @param expectedRemoteHistogramCount expected observation count on standbyToLeaderPromotionRemoteDcLagBytes
+   * @param expectedRemoteHistogramMax expected remote-DC histogram max; ignored when count is 0
+   * @param expectedUnknownLagCount expected value of standbyToLeaderPromotionUnknownLagPeerCount
+   */
+  private void runStandbyToLeaderPromotionMetricsTest(long localPeerLag1, long localPeerLag2, long remotePeerLag1,
+      long remotePeerLag2, int expectedLocalHistogramCount, long expectedLocalHistogramMax,
+      int expectedRemoteHistogramCount, long expectedRemoteHistogramMax, int expectedUnknownLagCount) throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+
+    String localDc = clusterMap.getDataNodeIds().get(0).getDatacenterName();
+    PartitionId partitionId = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    List<RemoteReplicaInfo> remoteReplicaInfos =
+        replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
+    List<RemoteReplicaInfo> localDcPeers = new ArrayList<>();
+    List<RemoteReplicaInfo> remoteDcPeers = new ArrayList<>();
+    for (RemoteReplicaInfo info : remoteReplicaInfos) {
+      if (localDc.equals(info.getReplicaId().getDataNodeId().getDatacenterName())) {
+        localDcPeers.add(info);
+      } else {
+        remoteDcPeers.add(info);
+      }
+    }
+    assertTrue("Test requires partition to have at least 2 local-DC peers", localDcPeers.size() >= 2);
+    assertTrue("Test requires partition to have at least 2 remote-DC peers", remoteDcPeers.size() >= 2);
+    if (localPeerLag1 >= 0) {
+      localDcPeers.get(0).setLocalLagFromRemoteInBytes(localPeerLag1);
+    }
+    if (localPeerLag2 >= 0) {
+      localDcPeers.get(1).setLocalLagFromRemoteInBytes(localPeerLag2);
+    }
+    if (remotePeerLag1 >= 0) {
+      remoteDcPeers.get(0).setLocalLagFromRemoteInBytes(remotePeerLag1);
+    }
+    if (remotePeerLag2 >= 0) {
+      remoteDcPeers.get(1).setLocalLagFromRemoteInBytes(remotePeerLag2);
+    }
+
+    Histogram localDcHistogram = replicationManager.replicationMetrics.standbyToLeaderPromotionLocalDcLagBytes;
+    Histogram remoteDcHistogram = replicationManager.replicationMetrics.standbyToLeaderPromotionRemoteDcLagBytes;
+    Counter counter = replicationManager.replicationMetrics.standbyToLeaderPromotionUnknownLagPeerCount;
+
+    mockHelixParticipant.onPartitionBecomeLeaderFromStandby(partitionId.toPathString());
+
+    assertEquals("Local-DC lag histogram observation count", expectedLocalHistogramCount, localDcHistogram.getCount());
+    if (expectedLocalHistogramCount > 0) {
+      assertEquals("Local-DC lag histogram max", expectedLocalHistogramMax, localDcHistogram.getSnapshot().getMax());
+    }
+    assertEquals("Remote-DC lag histogram observation count", expectedRemoteHistogramCount,
+        remoteDcHistogram.getCount());
+    if (expectedRemoteHistogramCount > 0) {
+      assertEquals("Remote-DC lag histogram max", expectedRemoteHistogramMax, remoteDcHistogram.getSnapshot().getMax());
+    }
+    assertEquals("Unknown-lag counter", expectedUnknownLagCount, counter.getCount());
+
+    storageManager.shutdown();
   }
 
   /**
@@ -2820,6 +3056,18 @@ public class ReplicationTest extends ReplicationTestHelper {
     String localDcName = clusterMap.getDataNodeIds().get(0).getDatacenterName();
     remoteDcNames.remove(localDcName);
 
+    // The per-DC avg/max/min gauges filter to STANDBY/LEADER local replicas. BlobStore defaults
+    // to OFFLINE, so transition every local replica to STANDBY (mirroring what production does
+    // via Helix once BOOTSTRAP completes) and trigger one updateLagMetricForRemoteReplica per
+    // (partition, peer) to seed localReplicaStateByPartition before the gauge assertions run.
+    for (PartitionInfo partitionInfo : replicationManager.partitionToPartitionInfo.values()) {
+      for (RemoteReplicaInfo info : partitionInfo.getRemoteReplicaInfos()) {
+        info.getLocalStore().setCurrentState(ReplicaState.STANDBY);
+        replicationManager.replicationMetrics.updateLagMetricForRemoteReplica(info,
+            info.getRemoteLagFromLocalInBytes());
+      }
+    }
+
     // before updating replication lag, make sure avg lag in each dc is 0
     MetricRegistry metricRegistry = replicationManager.getMetricRegistry();
     String prefix = ReplicaThread.class.getName() + ".";
@@ -2938,6 +3186,258 @@ public class ReplicationTest extends ReplicationTestHelper {
         ReplicaState.BOOTSTRAP, specialReplicaInfo.getLocalStore().getCurrentState());
     // verify that bootstrap sync-up was signaled as complete (waitBootstrapCompleted should return immediately)
     replicaSyncUpService.waitBootstrapCompleted(specialPartitionId.toPathString());
+  }
+
+  /**
+   * Tests {@link ReplicationMetrics#getMaxLagFromActivePeersForPartition(PartitionId)} — verifies
+   * the gauge returns -1 unless the local replica's {@link ReplicaState} is STANDBY or LEADER.
+   * Filters out partitions whose local replica is legitimately catching up (BOOTSTRAP), being
+   * decommissioned (INACTIVE), or otherwise not expected to be in sync (OFFLINE/ERROR/DROPPED).
+   */
+  @Test
+  public void replicationLagActiveStateAwareGaugeTest() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    ReplicationMetrics metrics = new ReplicationMetrics(metricRegistry, Collections.emptyList());
+
+    PartitionId partitionId = mock(PartitionId.class);
+    when(partitionId.toPathString()).thenReturn("42");
+    DataNodeId peerNode = mock(DataNodeId.class);
+    ReplicaId peerReplicaId = mock(ReplicaId.class);
+    when(peerReplicaId.getPartitionId()).thenReturn(partitionId);
+    when(peerReplicaId.getDataNodeId()).thenReturn(peerNode);
+    Store localStore = mock(Store.class);
+    RemoteReplicaInfo info = mock(RemoteReplicaInfo.class);
+    when(info.getReplicaId()).thenReturn(peerReplicaId);
+    when(info.getLocalStore()).thenReturn(localStore);
+
+    // Register the per-partition state-blind gauge. The state-aware lookup is exposed only as a
+    // public method (for admin tooling), not as a per-partition gauge — per-partition cardinality
+    // is impractical for dashboards, so the dashboard signal is the per-DC aggregate registered
+    // by addMetricsForRemoteReplicaInfo.
+    metrics.addLagMetricForPartition(partitionId, true);
+    String maxLagName = MetricRegistry.name(ReplicaThread.class, "Partition-42-maxLagFromPeersInBytes");
+    assertTrue("Existing per-partition gauge should be registered",
+        metricRegistry.getGauges().containsKey(maxLagName));
+
+    // Unregistered partition: returns -1 regardless of state.
+    PartitionId unknownPartition = mock(PartitionId.class);
+    assertEquals("Unregistered partition should return -1", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(unknownPartition));
+
+    // Registered partition with no updates yet: state map is empty, so -1.
+    assertEquals("Registered partition with no updates should return -1", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // BOOTSTRAP: state-blind gauge reflects the lag, state-aware gauge returns -1.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    metrics.updateLagMetricForRemoteReplica(info, 100L);
+    assertEquals("State-blind gauge should report the lag", 100L, metrics.getMaxLagForPartition(partitionId));
+    assertEquals("State-aware gauge should suppress lag during local BOOTSTRAP", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // STANDBY: both gauges report the lag.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    metrics.updateLagMetricForRemoteReplica(info, 200L);
+    assertEquals("State-blind gauge should report the lag", 200L, metrics.getMaxLagForPartition(partitionId));
+    assertEquals("State-aware gauge should report the lag when local is STANDBY", 200L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // LEADER: state-aware gauge still reports the lag (LEADER is functionally equivalent for catch-up).
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.LEADER);
+    metrics.updateLagMetricForRemoteReplica(info, 300L);
+    assertEquals("State-aware gauge should report the lag when local is LEADER", 300L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // INACTIVE (decommissioning): state-aware gauge suppresses; state-blind gauge keeps reporting.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.INACTIVE);
+    metrics.updateLagMetricForRemoteReplica(info, 400L);
+    assertEquals("State-blind gauge should still report the lag", 400L, metrics.getMaxLagForPartition(partitionId));
+    assertEquals("State-aware gauge should suppress lag during local INACTIVE", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+
+    // OFFLINE: same — suppressed.
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.OFFLINE);
+    metrics.updateLagMetricForRemoteReplica(info, 500L);
+    assertEquals("State-aware gauge should suppress lag during local OFFLINE", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(partitionId));
+  }
+
+  /**
+   * Tests {@link ReplicationMetrics#getActiveMaxLagFromDc(String)} — the per-peer-DC active
+   * aggregate that complements the per-partition state-aware gauge with a fixed-cardinality
+   * signal (one gauge per peer DC) suitable for dashboards and alerts.
+   */
+  @Test
+  public void perDcActiveMaxLagAggregateTest() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    ReplicationMetrics metrics = new ReplicationMetrics(metricRegistry, Collections.emptyList());
+
+    // Two peer DCs (dc-east, dc-west). Two partitions (p1, p2). Each partition has a peer in each DC.
+    Store localStore1 = mock(Store.class);
+    Store localStore2 = mock(Store.class);
+    PartitionId p1 = mock(PartitionId.class);
+    when(p1.toPathString()).thenReturn("p1");
+    when(p1.toString()).thenReturn("p1");
+    PartitionId p2 = mock(PartitionId.class);
+    when(p2.toPathString()).thenReturn("p2");
+    when(p2.toString()).thenReturn("p2");
+    RemoteReplicaInfo p1East = makeMockRemoteReplica(p1, "dc-east", "h1e", localStore1);
+    RemoteReplicaInfo p1West = makeMockRemoteReplica(p1, "dc-west", "h1w", localStore1);
+    RemoteReplicaInfo p2East = makeMockRemoteReplica(p2, "dc-east", "h2e", localStore2);
+    RemoteReplicaInfo p2West = makeMockRemoteReplica(p2, "dc-west", "h2w", localStore2);
+
+    // Register per-DC gauges. trackPerDatacenterLag=true wires up avg/max/min, all of which now
+    // share the state-filtered (STANDBY/LEADER) population via dcToActiveReplicaLagStats.
+    metrics.addLagMetricForPartition(p1, true);
+    metrics.addLagMetricForPartition(p2, true);
+    metrics.addMetricsForRemoteReplicaInfo(p1East, true, false);
+    metrics.addMetricsForRemoteReplicaInfo(p1West, true, false);
+    metrics.addMetricsForRemoteReplicaInfo(p2East, true, false);
+    metrics.addMetricsForRemoteReplicaInfo(p2West, true, false);
+
+    // Verify the existing avg/max/min per-DC gauges register (no separate "active" gauge — the
+    // existing names now carry the state-filtered semantics).
+    assertTrue("dc-east avg gauge should register",
+        metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
+            "dc-east-avgReplicaLagFromLocalInBytes")));
+    assertTrue("dc-east max gauge should register",
+        metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
+            "dc-east-maxReplicaLagFromLocalInBytes")));
+    assertTrue("dc-east min gauge should register",
+        metricRegistry.getGauges().containsKey(MetricRegistry.name(ReplicaThread.class,
+            "dc-east-minReplicaLagFromLocalInBytes")));
+
+    // No state recorded yet → no active partitions → -1 from all per-DC accessors.
+    // getAvgLagFromDc is the canonical refresh path for dcToActiveReplicaLagStats; the max/min
+    // gauges and getActiveMaxLagFromDc read from that cache, so they need a getAvgLagFromDc call
+    // to see fresh values.
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
+    assertEquals("With no state recorded, dc-east aggregate should be -1", -1L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+
+    // p1 STANDBY (lags 100 east / 200 west); p2 BOOTSTRAP (lags 300 east / 400 west).
+    when(localStore1.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    when(localStore2.getCurrentState()).thenReturn(ReplicaState.BOOTSTRAP);
+    when(p1East.getRemoteLagFromLocalInBytes()).thenReturn(100L);
+    when(p1West.getRemoteLagFromLocalInBytes()).thenReturn(200L);
+    when(p2East.getRemoteLagFromLocalInBytes()).thenReturn(300L);
+    when(p2West.getRemoteLagFromLocalInBytes()).thenReturn(400L);
+    metrics.updateLagMetricForRemoteReplica(p1East, 100L);
+    metrics.updateLagMetricForRemoteReplica(p1West, 200L);
+    metrics.updateLagMetricForRemoteReplica(p2East, 300L);
+    metrics.updateLagMetricForRemoteReplica(p2West, 400L);
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
+
+    // Only p1 (STANDBY) counts → aggregate excludes p2's higher BOOTSTRAP lag.
+    assertEquals("dc-east aggregate should only see p1's east lag (excludes BOOTSTRAP p2)", 100L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+    assertEquals("dc-west aggregate should only see p1's west lag (excludes BOOTSTRAP p2)", 200L,
+        metrics.getActiveMaxLagFromDc("dc-west"));
+
+    // The existing per-DC avg gauge now also filters: dc-east avg over active partitions = 100
+    // (just p1=100), not (100 + 300) / 2 = 200. Confirms avg/max share the same population.
+    Object avgGaugeValue = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-avgReplicaLagFromLocalInBytes"))
+        .getValue();
+    assertEquals("dc-east avg gauge should reflect active-only filter (excludes BOOTSTRAP p2)", 100.0,
+        ((Double) avgGaugeValue).doubleValue(), 0.0);
+
+    // p2 transitions to LEADER → its larger lag now dominates.
+    when(localStore2.getCurrentState()).thenReturn(ReplicaState.LEADER);
+    metrics.updateLagMetricForRemoteReplica(p2East, 300L);
+    metrics.updateLagMetricForRemoteReplica(p2West, 400L);
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
+    assertEquals("dc-east aggregate is max(p1=100, p2=300) = 300", 300L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+    assertEquals("dc-west aggregate is max(p1=200, p2=400) = 400", 400L,
+        metrics.getActiveMaxLagFromDc("dc-west"));
+
+    // Unknown DC → -1.
+    assertEquals("Unknown DC should return -1", -1L, metrics.getActiveMaxLagFromDc("dc-other"));
+
+    // Cleanup on partition removal: state map entry is removed alongside the gauge so memory does
+    // not leak when partitions move/decommission. After p1 is removed, the per-DC aggregate
+    // ignores p1 (state lookup returns null → filtered out) and the per-partition method returns -1.
+    metrics.removeLagMetricForPartition(p1);
+    metrics.getAvgLagFromDc("dc-east");
+    metrics.getAvgLagFromDc("dc-west");
+    assertEquals("After removeLagMetricForPartition, p1 state lookup should return -1", -1L,
+        metrics.getMaxLagFromActivePeersForPartition(p1));
+    assertEquals("After p1 removal, dc-east aggregate equals only p2's lag (300)", 300L,
+        metrics.getActiveMaxLagFromDc("dc-east"));
+    assertEquals("After p1 removal, dc-west aggregate equals only p2's lag (400)", 400L,
+        metrics.getActiveMaxLagFromDc("dc-west"));
+  }
+
+  /** Helper for {@link #perDcActiveMaxLagAggregateTest()}: builds a mocked RemoteReplicaInfo. */
+  private static RemoteReplicaInfo makeMockRemoteReplica(PartitionId partition, String dcName, String host,
+      Store localStore) {
+    DataNodeId node = mock(DataNodeId.class);
+    when(node.getDatacenterName()).thenReturn(dcName);
+    when(node.getHostname()).thenReturn(host);
+    when(node.getPort()).thenReturn(6667);
+    ReplicaId replicaId = mock(ReplicaId.class);
+    when(replicaId.getPartitionId()).thenReturn(partition);
+    when(replicaId.getDataNodeId()).thenReturn(node);
+    RemoteReplicaInfo info = mock(RemoteReplicaInfo.class);
+    when(info.getReplicaId()).thenReturn(replicaId);
+    when(info.getLocalStore()).thenReturn(localStore);
+    return info;
+  }
+
+  /**
+   * Documents and guards the per-DC gauge wiring contract: the avg gauge is the single iteration
+   * point per scrape, and the max/min gauges read from a cache that the avg gauge populates as a
+   * side effect. So callers must poll the avg gauge in every scrape to keep max/min fresh.
+   * <p>
+   * This test enforces both halves of the contract:
+   * <ul>
+   *   <li>If max/min are polled without polling avg first, they return -1 (cache empty).</li>
+   *   <li>After polling the avg gauge, the cache is populated and max/min return the expected
+   *       value on the next read.</li>
+   * </ul>
+   * If a future change either (a) decouples max/min from the cache or (b) removes the cache.put
+   * inside {@link ReplicationMetrics#getAvgLagFromDc}, one half of the assertions fails.
+   */
+  @Test
+  public void perDcGaugeWiringRequiresAvgPollTest() {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    ReplicationMetrics metrics = new ReplicationMetrics(metricRegistry, Collections.emptyList());
+
+    Store localStore = mock(Store.class);
+    when(localStore.getCurrentState()).thenReturn(ReplicaState.STANDBY);
+    PartitionId partition = mock(PartitionId.class);
+    when(partition.toPathString()).thenReturn("p1");
+    when(partition.toString()).thenReturn("p1");
+    RemoteReplicaInfo peer = makeMockRemoteReplica(partition, "dc-east", "h1", localStore);
+    when(peer.getRemoteLagFromLocalInBytes()).thenReturn(500L);
+
+    metrics.addLagMetricForPartition(partition, true);
+    metrics.addMetricsForRemoteReplicaInfo(peer, true, false);
+    metrics.updateLagMetricForRemoteReplica(peer, 500L);
+
+    com.codahale.metrics.Gauge<?> avgGauge = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-avgReplicaLagFromLocalInBytes"));
+    com.codahale.metrics.Gauge<?> maxGauge = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-maxReplicaLagFromLocalInBytes"));
+    com.codahale.metrics.Gauge<?> minGauge = metricRegistry.getGauges()
+        .get(MetricRegistry.name(ReplicaThread.class, "dc-east-minReplicaLagFromLocalInBytes"));
+
+    // (1) Before avg is polled, the cache is empty and max/min return -1.
+    assertEquals("max gauge should return -1 before avg has populated the cache", -1L,
+        ((Long) maxGauge.getValue()).longValue());
+    assertEquals("min gauge should return -1 before avg has populated the cache", -1L,
+        ((Long) minGauge.getValue()).longValue());
+
+    // (2) Polling avg refreshes dcToActiveReplicaLagStats — max/min now return the expected lag.
+    avgGauge.getValue();
+    assertEquals("max gauge should return the active lag after avg poll refreshes cache", 500L,
+        ((Long) maxGauge.getValue()).longValue());
+    assertEquals("min gauge should return the active lag after avg poll refreshes cache", 500L,
+        ((Long) minGauge.getValue()).longValue());
   }
 
   /**

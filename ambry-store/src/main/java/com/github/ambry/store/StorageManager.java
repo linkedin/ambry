@@ -1010,20 +1010,19 @@ public class StorageManager implements StoreManager {
           ((BlobStore) store).setRecoverFromDecommission(false);
         }
 
-        // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
-        // it to stay in BOOTSTRAP state when catching up with peers.
+        // Always create the bootstrap_in_progress file to force the store through the sync-up check before
+        // transitioning to STANDBY. This ensures a restarted replica catches up with peers even if it has stale data
+        // on disk (e.g., after a rolling restart where blobs were written to other replicas during downtime).
+        // For stores that are already caught up, the sync-up check completes in <1 second.
         long storeUsedCapacity = store.getSizeInBytes();
-        if (storeUsedCapacity <= HEADER_SIZE) {
-          logger.info(
-              "Store {} has used capacity {} less than or equal to {} bytes, consider it recently created and make it go through bootstrap process.",
-              partitionName, storeUsedCapacity, HEADER_SIZE);
-          try {
-            createBootstrapFileIfAbsent(replica);
-          } catch (IOException e) {
-            logger.error("Failed to create bootstrap file for store {}", partitionName);
-            throw new StateTransitionException("Failed to create bootstrap file for " + partitionName,
-                ReplicaOperationFailure);
-          }
+        logger.info("Store {} has used capacity {} bytes, creating bootstrap file to ensure sync-up with peers.",
+            partitionName, storeUsedCapacity);
+        try {
+          createBootstrapFileIfAbsent(replica);
+        } catch (IOException e) {
+          logger.error("Failed to create bootstrap file for store {}", partitionName);
+          throw new StateTransitionException("Failed to create bootstrap file for " + partitionName,
+              ReplicaOperationFailure);
         }
       }
     }

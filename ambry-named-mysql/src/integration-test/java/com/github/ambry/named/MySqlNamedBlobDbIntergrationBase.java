@@ -82,6 +82,12 @@ public class MySqlNamedBlobDbIntergrationBase {
       properties.setProperty(MySqlNamedBlobDbConfig.ENABLE_HARD_DELETE, Boolean.toString(true));
     }
     properties.setProperty(MySqlNamedBlobDbConfig.LIST_NAMED_BLOBS_SQL_OPTION, Integer.toString(listSqlOptions));
+    // These cleanup-scenario tests assert the keep-only-latest behavior, which is the retentionVersions=1 case with
+    // age-based retention disabled. Pin them explicitly so the production defaults (which keep more versions within a
+    // time window) do not change their expected stale counts; the version/age retention policy is covered by the
+    // unit tests in MySqlNamedBlobDbTest.
+    properties.setProperty(MySqlNamedBlobDbConfig.STALE_DATA_RETENTION_VERSIONS, Integer.toString(1));
+    properties.setProperty(MySqlNamedBlobDbConfig.STALE_READY_DATA_RETENTION_DAYS, Integer.toString(0));
     return properties;
   }
 

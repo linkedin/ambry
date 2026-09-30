@@ -108,4 +108,42 @@ public class NamedBlobPathTest {
       assertTrue(e.getMessage().contains("blob name"));
     }
   }
+
+  /**
+   * S3 clients can send `prefix=` with no value (an empty header). Semantically that's the same as
+   * omitting the prefix entirely. {@link NamedBlobPath#parseS3} must collapse it to null so the
+   * downstream {@code MySqlNamedBlobDb.run_list_v2} routes to LIST_ALL_QUERY instead of
+   * LIST_WITH_PREFIX_SQL with {@code blob_name LIKE '%'} (the latter produces a Window-over-full-scan
+   * plan under option 4 that can exceed MAX_EXECUTION_TIME on large containers).
+   */
+  @Test
+  public void testParseS3EmptyPrefixCollapsesToNull() throws Exception {
+    Map<String, Object> args = new HashMap<>();
+    args.put(RestUtils.InternalKeys.S3_REQUEST, "true");
+    args.put(RestUtils.InternalKeys.LIST_REQUEST, "true");
+    args.put(RestUtils.PREFIX_PARAM_NAME, "");
+    NamedBlobPath nbp = NamedBlobPath.parse("/named/account/container", args);
+    assertEquals("account", nbp.getAccountName());
+    assertEquals("container", nbp.getContainerName());
+    assertNull("Empty-string prefix should be normalized to null in parseS3", nbp.getBlobNamePrefix());
+  }
+
+  @Test
+  public void testParseS3OmittedPrefixIsNull() throws Exception {
+    Map<String, Object> args = new HashMap<>();
+    args.put(RestUtils.InternalKeys.S3_REQUEST, "true");
+    args.put(RestUtils.InternalKeys.LIST_REQUEST, "true");
+    NamedBlobPath nbp = NamedBlobPath.parse("/named/account/container", args);
+    assertNull("Omitted prefix should be null", nbp.getBlobNamePrefix());
+  }
+
+  @Test
+  public void testParseS3NonEmptyPrefixPreserved() throws Exception {
+    Map<String, Object> args = new HashMap<>();
+    args.put(RestUtils.InternalKeys.S3_REQUEST, "true");
+    args.put(RestUtils.InternalKeys.LIST_REQUEST, "true");
+    args.put(RestUtils.PREFIX_PARAM_NAME, "foo/");
+    NamedBlobPath nbp = NamedBlobPath.parse("/named/account/container", args);
+    assertEquals("foo/", nbp.getBlobNamePrefix());
+  }
 }

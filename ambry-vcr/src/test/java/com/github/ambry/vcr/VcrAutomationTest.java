@@ -25,6 +25,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.HelixControllerManager;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
@@ -128,7 +129,7 @@ public class VcrAutomationTest {
     HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
     String vcConfigData = CloudConfig.DEFAULT_VCR_HELIX_UPDATE_CONFIG;
     try (InputStream input = new ByteArrayInputStream(vcConfigData.getBytes())) {
-      vcrHelixConfig = new ObjectMapper().readValue(input, HelixVcrUtil.VcrHelixConfig.class);
+      vcrHelixConfig = JsonUtil.newObjectMapper().readValue(input, HelixVcrUtil.VcrHelixConfig.class);
     } catch (IOException ex) {
       throw new IllegalStateException("Could not load config from config data: " + vcConfigData);
     }

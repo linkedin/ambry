@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
@@ -24,6 +25,7 @@ import static com.github.ambry.account.Dataset.*;
  * updated fields through this builder. A {@link Dataset} can be built in two ways: 1) from an existing {@link Dataset}
  * object; and 2) by supplying required fields of a {@link Dataset}.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DatasetBuilder {
   // necessary
   private String accountName;

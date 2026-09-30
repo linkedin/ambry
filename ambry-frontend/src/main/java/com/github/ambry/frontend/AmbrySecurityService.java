@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -35,6 +34,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.throttle.HostLevelThrottler;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -123,7 +123,14 @@ class AmbrySecurityService implements SecurityService {
                 URLEncoder.encode((String) restRequest.getArgs().get(Headers.BLOB_ID), StandardCharsets.UTF_8.name());
             restRequest.setArg(Headers.BLOB_ID, encodedBlobId);
           } catch (Exception encodingException) {
-            LOGGER.error("Failed to encode blob id signed url: {}", restRequest.getArgs().get(Headers.BLOB_ID), e);
+            LOGGER.error("Failed to encode blob id signed url: {}", restRequest.getArgs().get(Headers.BLOB_ID),
+                encodingException);
+            // Also log the outer verifySignedRequest exception if there was one, so both
+            // are visible at this site. Null-guarded — `e` is null on the verification-
+            // succeeded path (encoding can still fail there for malformed input).
+            if (e != null) {
+              LOGGER.error("verifySignedRequest also reported an exception", e);
+            }
           }
         }
         callback.onCompletion(r, e);
@@ -160,7 +167,7 @@ class AmbrySecurityService implements SecurityService {
       if (!isOpen) {
         exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
-        exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+        exception = new RestServiceException("Host throttled", RestServiceErrorCode.HostLevelThrottled);
       } else {
         if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.recommend(restRequest);

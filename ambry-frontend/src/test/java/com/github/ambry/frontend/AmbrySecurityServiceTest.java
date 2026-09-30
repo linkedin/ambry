@@ -20,7 +20,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.QuotaConfig;
@@ -46,6 +45,7 @@ import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
+import com.github.ambry.throttle.HostLevelThrottler;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
@@ -95,7 +95,8 @@ public class AmbrySecurityServiceTest {
   private static final String DEFAULT_RESERVED_METADATAID = "AAYIAgBnAAIAAQAAAAAAAA6x5AIyURP3SIGTZIAZFxI85g";
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
-  private static final HostLevelThrottler hostLevelThrottler = new HostLevelThrottler(HOST_THROTTLE_CONFIG);
+  private static final HostLevelThrottler hostLevelThrottler =
+      new HostLevelThrottler(HOST_THROTTLE_CONFIG, new MetricRegistry());
   private static final QuotaManager QUOTA_MANAGER;
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
@@ -273,8 +274,10 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)})} should throw RestServiceException if rate
-   * is more than expected. RestServiceErrorCode.TooManyRequests is expected in this case.
+   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)})} should throw RestServiceException if the
+   * host-level throttler signals overload. RestServiceErrorCode.HostLevelThrottled (mapped to HTTP 503) is expected
+   * in this case — host-local overload semantic is "this host is overloaded; try another," which 503 expresses
+   * correctly. The dedicated error code keeps throttler drops separate from generic ServiceUnavailable in metrics.
    */
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
@@ -299,7 +302,7 @@ public class AmbrySecurityServiceTest {
         ambrySecurityService.postProcessRequest(restRequest).get();
         Assert.fail("Should have failed.");
       } catch (Exception e) {
-        Assert.assertEquals("Exception should be TooManyRequests", RestServiceErrorCode.TooManyRequests,
+        Assert.assertEquals("Exception should be HostLevelThrottled", RestServiceErrorCode.HostLevelThrottled,
             ((RestServiceException) e.getCause()).getErrorCode());
       }
     }

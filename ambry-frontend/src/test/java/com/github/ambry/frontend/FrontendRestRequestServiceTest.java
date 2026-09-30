@@ -62,6 +62,7 @@ import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetricsClassifier.RequestSizeCategory;
 import com.github.ambry.rest.RestRequestMetricsTracker;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
@@ -89,6 +90,7 @@ import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.JsonUtil;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -265,6 +267,68 @@ public class FrontendRestRequestServiceTest {
     router.close();
   }
 
+  @Test
+  public void testNotFoundMetricsFollowS3Routing() throws Exception {
+    refContainer = new ContainerBuilder(refContainer).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
+    accountService.updateAccounts(
+        Collections.singletonList(new AccountBuilder(refAccount).addOrUpdateContainer(refContainer).build()));
+    CompletableFuture<NamedBlobRecord> missingBlob = new CompletableFuture<>();
+    missingBlob.completeExceptionally(new RestServiceException("missing name", RestServiceErrorCode.NotFound));
+    when(namedBlobDb.get(any(), any(), any(), any(), anyBoolean())).thenReturn(missingBlob);
+    CompletableFuture<Page<NamedBlobRecord>> missingListing = new CompletableFuture<>();
+    missingListing.completeExceptionally(new RestServiceException("missing listing", RestServiceErrorCode.NotFound));
+    when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(missingListing);
+    String bucket = "/s3/" + refAccount.getName() + "/" + refContainer.getName();
+    for (boolean ssl : new boolean[]{false, true}) {
+      for (String operation : new String[]{"GetBlob", "HeadBlob", "ListBlobs", "RouterGet"}) {
+        boolean routerGet = operation.equals("RouterGet");
+        RestMethod method = operation.equals("HeadBlob") ? RestMethod.HEAD : RestMethod.GET;
+        String uri = routerGet ? "/" + referenceBlobIdStr
+            : bucket + (operation.equals("ListBlobs") ? "?list-type=2" : "/missing");
+        RestRequest request = spy(createRestRequest(method, uri, null, null));
+        doReturn(ssl).when(request).isSslUsed();
+        Map<String, Long> before = metricRegistry.getCounters().entrySet().stream()
+            .filter(entry -> entry.getKey().endsWith("NotFoundCount"))
+            .filter(entry -> entry.getKey().startsWith(FrontendRestRequestService.class.getName() + ".")
+                || entry.getKey().startsWith(NamedBlobListHandler.class.getName() + "."))
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getCount()));
+        MockRestResponseChannel response = verifyOperationFailure(request, RestServiceErrorCode.NotFound);
+        assertEquals(ResponseStatus.NotFound, response.getStatus());
+        request.getMetricsTracker().setResponseStatus(response.getStatus());
+        request.getMetricsTracker().recordMetrics();
+        request.close();
+        String expectedMetric = MetricRegistry.name(
+            operation.equals("ListBlobs") ? NamedBlobListHandler.class : FrontendRestRequestService.class,
+            (routerGet ? "GetBlob" : operation) + (ssl ? "Ssl" : "") + "NotFoundCount");
+        before.forEach((name, count) -> assertEquals(name, count + (name.equals(expectedMetric) ? 1 : 0),
+            metricRegistry.getCounters().get(name).getCount()));
+        assertTrue(expectedMetric, before.containsKey(expectedMetric));
+      }
+    }
+    verify(namedBlobDb, times(4)).get(any(), any(), eq("missing"), any(), anyBoolean());
+    verify(namedBlobDb, times(2)).list(any(), any(), any(), any(), any());
+  }
+
+  @Test
+  public void testNotFoundMetricsIsolateTransportAndEncryptionVariants() {
+    for (boolean ssl : new boolean[]{false, true}) {
+      for (boolean encrypted : new boolean[]{false, true}) {
+        String selected = MetricRegistry.name(FrontendRestRequestService.class,
+            "GetBlob" + (ssl ? "Ssl" : "") + (encrypted ? "Encrypted" : "") + "NotFoundCount");
+        Map<String, Long> before = metricRegistry.getCounters().entrySet().stream()
+            .filter(entry -> entry.getKey().endsWith("NotFoundCount"))
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getCount()));
+        RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+        tracker.injectMetrics(frontendMetrics.getBlobMetricsGroup.getRestRequestMetrics(ssl, encrypted));
+        tracker.setResponseStatus(ResponseStatus.NotFound);
+        tracker.recordMetrics();
+        before.forEach((name, count) -> assertEquals(name, count + (name.equals(selected) ? 1 : 0),
+            metricRegistry.getCounters().get(name).getCount()));
+        assertTrue(selected, before.containsKey(selected));
+      }
+    }
+  }
+
   /**
    * Tests basic startup and shutdown functionality (no exceptions).
    * @throws InstantiationException
@@ -273,6 +337,66 @@ public class FrontendRestRequestServiceTest {
   public void startShutDownTest() throws InstantiationException {
     frontendRestRequestService.start();
     frontendRestRequestService.shutdown();
+  }
+
+  /**
+   * Tests the synchronous request-size classification used by transport termination metrics.
+   */
+  @Test
+  public void requestSizeClassificationTest() throws Exception {
+    JSONObject chunkHeaders = new JSONObject().put(RestUtils.Headers.CHUNK_UPLOAD, true);
+    JSONObject datasetVersionHeaders =
+        new JSONObject().put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    JSONObject namedStitchHeaders =
+        new JSONObject().put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, RestUtils.STITCH);
+    String prefixedPath = "/media/" + clusterName;
+    String s3Path = "/" + Operations.S3;
+    Object[][] testCases = {
+        {RestMethod.POST, prefixedPath + "/", null, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.POST, prefixedPath + "/", chunkHeaders, RequestSizeCategory.CHUNK},
+        {RestMethod.POST, prefixedPath + "/", datasetVersionHeaders, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.POST, prefixedPath + "/" + Operations.STITCH, null, RequestSizeCategory.OTHER},
+        {RestMethod.POST, prefixedPath + "/" + Operations.ACCOUNTS, null, RequestSizeCategory.OTHER},
+        {RestMethod.POST, prefixedPath + "/" + Operations.ACCOUNTS_CONTAINERS_DATASETS, null,
+            RequestSizeCategory.OTHER},
+        {RestMethod.POST, s3Path + "/account/container?uploads", null, RequestSizeCategory.OTHER},
+        {RestMethod.POST, s3Path + "/account/container/blob?uploads", null, RequestSizeCategory.OTHER},
+        {RestMethod.POST,
+            s3Path + "/account/container/blob?" + RestUtils.UPLOAD_ID_QUERY_PARAM + "=upload-id", null,
+            RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/blob", null,
+            RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/blob", namedStitchHeaders,
+            RequestSizeCategory.OTHER},
+        {RestMethod.PUT, s3Path + "/account/container/blob", null, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.PUT, s3Path + "/account/container/blob?" + RestUtils.UPLOAD_ID_QUERY_PARAM + "=upload-id", null,
+            RequestSizeCategory.MULTIPART_PART},
+        {RestMethod.PUT, s3Path + "/account", null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, s3Path + "/account/container", null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + s3Path + "/account/container/blob", null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.UPDATE_TTL, null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.UNDELETE, null, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/dataset/1",
+            datasetVersionHeaders, RequestSizeCategory.WHOLE_BLOB},
+        {RestMethod.PUT,
+            prefixedPath + "/" + Operations.NAMED_BLOB + "/account/container/dataset/1?" + DatasetVersionPath.OP
+                + "=" + DatasetVersionPath.RENAME + "&" + DatasetVersionPath.TARGET_VERSION + "=2",
+            datasetVersionHeaders, RequestSizeCategory.OTHER},
+        {RestMethod.PUT, prefixedPath + "/unrecognized", null, RequestSizeCategory.OTHER},
+        {RestMethod.GET, prefixedPath + "/", null, RequestSizeCategory.OTHER}};
+
+    for (Object[] testCase : testCases) {
+      RestMethod restMethod = (RestMethod) testCase[0];
+      String uri = (String) testCase[1];
+      JSONObject headers = (JSONObject) testCase[2];
+      RequestSizeCategory expectedCategory = (RequestSizeCategory) testCase[3];
+      RestRequest request = createRestRequest(restMethod, uri, headers, null);
+      Map<String, Object> argsBeforeClassification = new HashMap<>(request.getArgs());
+      assertEquals(restMethod + " " + uri + " was classified incorrectly", expectedCategory,
+          frontendRestRequestService.classifyRequestSize(request));
+      assertEquals("Request classification should not mutate request args", argsBeforeClassification,
+          request.getArgs());
+    }
   }
 
   /**
@@ -658,7 +782,7 @@ public class FrontendRestRequestServiceTest {
             .build();
 
     byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
     Map<String, Object> map =
         mapper.readValue(new String(datasetsUpdateJson), new TypeReference<Map<String, Object>>() {
         });
@@ -2496,7 +2620,7 @@ public class FrontendRestRequestServiceTest {
         return null;
       }
     }).when(accountStatsStore).queryAggregatedPartitionClassStorageStatsByClusterName(anyString());
-    ObjectMapper mapper = new ObjectMapper();
+    ObjectMapper mapper = JsonUtil.newObjectMapper();
 
     // construct a request to get account stats
     JSONObject headers = new JSONObject();
@@ -4787,4 +4911,3 @@ class FrontendTestUrlSigningServiceFactory implements UrlSigningServiceFactory {
     };
   }
 }
-

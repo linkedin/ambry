@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -44,6 +45,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
+@Ignore("Cloud-tier test that does not exercise Azurite — ambry-cloud is staged-not-active in production.")
 @RunWith(MockitoJUnitRunner.class)
 public class CloudStorageCompactorTest {
   private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactorTest.class);

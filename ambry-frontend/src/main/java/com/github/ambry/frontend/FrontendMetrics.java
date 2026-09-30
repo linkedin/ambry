@@ -175,6 +175,11 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics s3PutHandleMetrics;
   public final AsyncOperationTracker.Metrics s3GetHandleMetrics;
 
+  // Counts every per-object delete failure inside an S3 batch-delete request. Surfaces partial
+  // failures that S3 DeleteObjects returns inside the (HTTP 200) response body, which were
+  // previously invisible to operators without parsing every response payload.
+  public final Counter s3BatchDeleteSubOpFailureCount;
+
   // Rates
   // AmbrySecurityService
   public final Meter securityServicePreProcessRequestRate;
@@ -265,6 +270,8 @@ public class FrontendMetrics {
   // GetReplicasHandler
   public final Counter invalidBlobIdError;
   public final Counter responseConstructionError;
+  // S3BatchDeleteHandler
+  public final Counter s3BatchDeleteRequestParseError;
   // Other
   // FrontendRestRequestService
   public final Histogram restRequestServiceStartupTimeInMs;
@@ -296,6 +303,7 @@ public class FrontendMetrics {
   public final Counter copyDatasetVersionError;
   public final Counter deleteDatasetVersionOutOfRetentionError;
   public final Counter deleteDatasetVersionIfUploadFailCount;
+  public final Counter namedBlobCleanupUncaughtErrorCount;
   public final Meter addDatasetVersionRate;
   public final Meter getDatasetVersionRate;
   public final Meter deleteDatasetVersionRate;
@@ -533,6 +541,8 @@ public class FrontendMetrics {
     s3DeleteHandleMetrics = new AsyncOperationTracker.Metrics(S3DeleteHandler.class, "S3Handle", metricRegistry);
     s3BatchDeleteHandleMetrics =
         new AsyncOperationTracker.Metrics(S3BatchDeleteHandler.class, "S3Handle", metricRegistry);
+    s3BatchDeleteSubOpFailureCount =
+        metricRegistry.counter(MetricRegistry.name(S3BatchDeleteHandler.class, "SubOpFailureCount"));
     s3ListHandleMetrics = new AsyncOperationTracker.Metrics(S3ListHandler.class, "S3Handle", metricRegistry);
     s3PutHandleMetrics = new AsyncOperationTracker.Metrics(S3PutHandler.class, "S3Handle", metricRegistry);
     s3GetHandleMetrics = new AsyncOperationTracker.Metrics(S3GetHandler.class, "S3Handle", metricRegistry);
@@ -723,6 +733,9 @@ public class FrontendMetrics {
     invalidBlobIdError = metricRegistry.counter(MetricRegistry.name(GetReplicasHandler.class, "InvalidBlobIdError"));
     responseConstructionError =
         metricRegistry.counter(MetricRegistry.name(GetReplicasHandler.class, "ResponseConstructionError"));
+    // S3BatchDeleteHandler
+    s3BatchDeleteRequestParseError =
+        metricRegistry.counter(MetricRegistry.name(S3BatchDeleteHandler.class, "RequestParseError"));
 
     // Other
     restRequestServiceStartupTimeInMs =
@@ -775,6 +788,8 @@ public class FrontendMetrics {
         MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionOutOfRetentionError"));
     deleteDatasetVersionIfUploadFailCount =
         metricRegistry.counter(MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionIfUploadFailCount"));
+    namedBlobCleanupUncaughtErrorCount = metricRegistry.counter(
+        MetricRegistry.name(FrontendRestRequestService.class, "NamedBlobCleanupUncaughtErrorCount"));
     addDatasetVersionRate =
         metricRegistry.meter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionRate"));
     getDatasetVersionRate = metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionRate"));

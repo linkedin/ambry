@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 
@@ -23,6 +24,7 @@ import com.github.ambry.server.storagestats.HostAccountStorageStats;
  */
 @JsonPropertyOrder({"header", "stats"})
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class HostAccountStorageStatsWrapper {
   private StatsHeader header;
   private HostAccountStorageStats stats;

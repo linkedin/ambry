@@ -16,6 +16,9 @@
 package com.github.ambry.named;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -39,17 +42,24 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -104,28 +114,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
   private final String LIST_WITH_PREFIX_SQL;
-
-  /**
-   * Similar like LIST_QUERY_V2, but this query is used when user don't provide the prefix and want to list all records.
-   */
-  // @formatter:off
-  private static final String LIST_ALL_QUERY = String.format(""
-      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
-      + "FROM named_blobs_v2 t1 "
-      + "INNER JOIN "
-      + "(SELECT account_id, container_id, blob_name, max(version) as version "
-      + "FROM named_blobs_v2 "
-      + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-      + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
-      + "        GROUP BY account_id, container_id, blob_name) t2 "
-      + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-      + "WHERE "
-      + "  CASE "
-      + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
-      + "     ELSE 1 "
-      + "   END "
-      + "ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
-  // @formatter:on
+  private final String LIST_ALL_SQL;
 
   /**
    * Attempt to insert a new mapping into the database. The 'modified_ts' column in the DB will be auto-populated on
@@ -178,6 +167,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           + "ORDER BY %s ASC, %s DESC " + "LIMIT ?", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, VERSION, BLOB_STATE,
       MODIFIED_TS, DELETED_TS, NAMED_BLOBS_V2, BLOB_NAME, VERSION);
 
+  private static final String GET_FIRST_BLOB_NAME = String.format(
+      "SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s >= ? ORDER BY %s ASC, %s ASC LIMIT 1", BLOB_NAME,
+      NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_NAME, VERSION);
+
   private final AccountService accountService;
   private final String localDatacenter;
   private final List<String> remoteDatacenters;
@@ -191,8 +184,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     this.accountService = accountService;
     this.config = config;
     this.LIST_WITH_PREFIX_SQL = getListWithPrefixSQLStatement(config);
+    this.LIST_ALL_SQL = getListAllSQLStatement(config);
     this.localDatacenter = localDatacenter;
     this.retryExecutor = new RetryExecutor(null);
+    this.metricsRecoder = metricRecorder;
     this.transactionExecutors = MySqlUtils.getDbEndpointsPerDC(config.dbInfo)
         .values()
         .stream()
@@ -201,9 +196,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         .collect(Collectors.toMap(DbEndpoint::getDatacenter,
             dbEndpoint -> new TransactionExecutor(dbEndpoint.getDatacenter(),
                 dataSourceFactory.getDataSource(dbEndpoint),
-                localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
+                localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize,
+                config.maxPendingTransactionsPerDatacenter, metricRecorder)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
-    this.metricsRecoder = metricRecorder;
     this.time = time;
   }
 
@@ -282,6 +277,134 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "    ) "
             + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
       // @formatter:on
+      case 4:
+        /**
+         * List named-blobs query, given a prefix.
+         * Correlated-subquery form (same shape as option 3) with an explicit ORDER BY. The prior option-4
+         * form used MAX(version) OVER (PARTITION BY blob_name); that window plan buffers/materializes the
+         * ENTIRE prefix range (Sort -> Window-with-buffering -> Materialize) before LIMIT can apply, so its
+         * cost is O(container) regardless of page size. On large containers this ran for many seconds and
+         * was connection-killed by the EI watchdog at ~6s. This correlated form early-terminates: the PK
+         * (account_id, container_id, blob_name, version) range scan walks blob_name in order, probes an
+         * indexed MAX(version) per candidate, and LIMIT stops after one page -> O(page).
+         *
+         * Correctness invariant — same as options 2 and 3:
+         * 1. The subquery MAX(version) is computed over all blob_state=READY rows for a given blob_name,
+         *    INCLUDING rows with a non-null deleted_ts.
+         * 2. The deleted_ts predicate is applied on the OUTER select, so if the latest READY version of a
+         *    blob has expired or been soft-deleted the blob is hidden entirely; we never surface a stale
+         *    older version.
+         *
+         * ORDER BY candidate.blob_name makes pagination deterministic. Because the PK range scan already
+         * yields blob_name in order, the optimizer satisfies it without an extra Sort. Binds SEVEN
+         * parameters — keep constructListQueryWithPrefixV4 in lockstep.
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
+            + "FROM named_blobs_v2 candidate "
+            + "WHERE candidate.account_id = ? "
+            + "    AND candidate.container_id = ? "
+            + "    AND candidate.%1$s"
+            + "    AND candidate.blob_name LIKE ? "
+            + "    AND candidate.blob_name >= ? "
+            + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + "    AND candidate.version = ( "
+            + "        SELECT MAX(latest.version) "
+            + "        FROM named_blobs_v2 latest "
+            + "        WHERE latest.account_id = ? "
+            + "            AND latest.container_id = ? "
+            + "            AND latest.blob_name = candidate.blob_name "
+            + "            AND latest.%1$s"
+            + "    ) "
+            + "ORDER BY candidate.blob_name "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
+        // @formatter:on
+      default:
+        throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
+    }
+  }
+
+  /**
+   * Build the no-prefix LIST SQL. Selected by the same {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption}
+   * knob as {@link #getListWithPrefixSQLStatement}. Options 2 and 3 share the legacy INNER-JOIN + MAX-grouped
+   * subquery shape; option 4 uses a correlated-subquery shape that early-terminates at LIMIT (it mirrors
+   * LIST_WITH_PREFIX_SQL option 3's shape, minus the prefix predicate, while keeping option-4's
+   * hide-latest-deleted semantic).
+   *
+   * S3-handler change in linkedin/ambry#3260's follow-up normalizes empty-string prefix to null at the API
+   * layer, so any empty-prefix S3 LIST now arrives here. Two shapes were rejected for this no-prefix path:
+   * option 4's LIST_WITH_PREFIX_SQL with {@code blob_name LIKE '%'} (full-container scan), and the
+   * window-function variant ({@code MAX(version) OVER (PARTITION BY blob_name)}) which materializes the whole
+   * container's derived table before LIMIT and timed out on large containers (HTTP 500).
+   */
+  private String getListAllSQLStatement(MySqlNamedBlobDbConfig config) {
+    switch (config.listNamedBlobsSQLOption) {
+      case 2:
+      case 3:
+        /**
+         * Legacy no-prefix LIST.
+         * INNER JOIN against a MAX(version) GROUP BY subquery. Preserves the pre-option-4 behavior:
+         * the deleted_ts filter lives in the inner subquery, so a soft-deleted latest version is
+         * filtered out before MAX is computed — meaning the second-latest non-deleted version surfaces
+         * as the apparent "latest" for that blob. This semantic differs from LIST_WITH_PREFIX_SQL
+         * options 2/3/4 (which hide the blob entirely when its latest version is deleted), but is
+         * preserved here to avoid changing default behavior for fabrics still on option 2 or 3.
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts, t1.blob_size, t1.modified_ts "
+            + "FROM named_blobs_v2 t1 "
+            + "INNER JOIN "
+            + "(SELECT account_id, container_id, blob_name, max(version) as version "
+            + "FROM named_blobs_v2 "
+            + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
+            + "        GROUP BY account_id, container_id, blob_name) t2 "
+            + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+            + "WHERE "
+            + "  CASE "
+            + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
+            + "     ELSE 1 "
+            + "   END "
+            + "ORDER BY t1.blob_name ASC LIMIT ?", STATE_MATCH, CURRENT_TIME);
+        // @formatter:on
+      case 4:
+        /**
+         * No-prefix LIST, correlated-subquery variant (mirrors LIST_WITH_PREFIX_SQL option 3's shape,
+         * minus the prefix predicate). The outer scans candidate rows in PRIMARY KEY (blob_name) order and
+         * keeps only the row whose version equals the per-name MAX(version). The deleted_ts predicate sits
+         * on the OUTER candidate, so a soft-deleted latest version hides the blob entirely — no older
+         * non-deleted version can substitute (its version != MAX) — matching LIST_WITH_PREFIX_SQL option 4
+         * semantics. Operators flipping from option 3 to option 4 inherit the consistent hide-latest-deleted
+         * semantic for the no-prefix path too.
+         *
+         * Unlike the window-function shape, this plan does NOT materialize the whole container. With the PK
+         * already ordered by blob_name, "ORDER BY blob_name LIMIT N" early-terminates after N matches instead
+         * of computing MAX(version) OVER the entire partition. That is what keeps an empty-prefix LIST on a
+         * large container bounded (first-page cost ~ O(N + skipped deleted-latest names)) rather than
+         * O(container) — the prior window variant materialized the full derived table before LIMIT and timed
+         * out on large containers (Communications link failure -> HTTP 500).
+         */
+        // @formatter:off
+        return String.format(""
+            + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
+            + "FROM named_blobs_v2 candidate "
+            + "WHERE candidate.account_id = ? " // 1
+            + "    AND candidate.container_id = ? " // 2
+            + "    AND candidate.%1$s " // blob_state = x
+            + "    AND ( ? IS NULL OR candidate.blob_name >= ? ) " // 3, 4 (pageToken twice)
+            + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + "    AND candidate.version = ( "
+            + "        SELECT MAX(latest.version) "
+            + "        FROM named_blobs_v2 latest "
+            + "        WHERE latest.account_id = ? " // 5
+            + "            AND latest.container_id = ? " // 6
+            + "            AND latest.blob_name = candidate.blob_name "
+            + "            AND latest.%1$s ) "
+            + "ORDER BY candidate.blob_name "
+            + "LIMIT ?", STATE_MATCH, CURRENT_TIME); // 7
+        // @formatter:on
       default:
         throw new IllegalArgumentException("Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
     }
@@ -379,12 +502,19 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName) {
+    return pullStaleBlobs(container, blobName, config.queryStaleDataMaxResults);
+  }
+
+  @Override
+  public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName,
+      int maxResults) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
-      List<StaleNamedBlob> potentialStaleNamedBlobResults = getAllBlobsForContainer(connection, container, blobName);
+      List<StaleNamedBlob> potentialStaleNamedBlobResults =
+          getAllBlobsForContainer(connection, container, blobName, maxResults);
       int resultSize = potentialStaleNamedBlobResults.size();
       if (resultSize == 0) {
         return new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults, null);
@@ -392,17 +522,38 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
       Container.ContainerStatus status = container.getStatus();
       if (status == Container.ContainerStatus.ACTIVE) {
-        staleBlobsWithLatestBlobName = getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays);
+        staleBlobsWithLatestBlobName =
+            getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays,
+                config.staleDataRetentionVersions, config.staleReadyDataRetentionDays);
       } else {
         staleBlobsWithLatestBlobName = new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults,
             potentialStaleNamedBlobResults.get(potentialStaleNamedBlobResults.size() - 1).getBlobName());
       }
-      if (resultSize < config.queryStaleDataMaxResults) {
+      if (resultSize < maxResults) {
         staleBlobsWithLatestBlobName  = new StaleBlobsWithLatestBlobName(staleBlobsWithLatestBlobName.getStaleBlobs(), null);
       }
 
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleBlobsWithLatestBlobName;
+    }, transactionStateTracker);
+  }
+
+  @Override
+  public CompletableFuture<String> getFirstBlobName(Container container, String blobNameFrom) {
+    TransactionStateTracker transactionStateTracker =
+        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+    return executeGenericTransactionAsync(true, (connection) -> {
+      try (PreparedStatement statement = connection.prepareStatement(GET_FIRST_BLOB_NAME)) {
+        statement.setInt(1, container.getParentAccountId());
+        statement.setInt(2, container.getId());
+        statement.setString(3, blobNameFrom);
+        try (ResultSet resultSet = statement.executeQuery()) {
+          if (resultSet.next()) {
+            return resultSet.getString(1);
+          }
+          return null;
+        }
+      }
     }, transactionStateTracker);
   }
 
@@ -492,68 +643,198 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   /**
-   * Execute transaction on datacenter.
+   * Execute transactions for a single datacenter on a bounded thread pool.
+   *
+   * <p>The pool uses a fixed number of worker threads (sized by {@code MySqlNamedBlobDbConfig.localPoolSize} /
+   * {@code remotePoolSize}) and a bounded {@link LinkedBlockingQueue} sized by
+   * {@code MySqlNamedBlobDbConfig.maxPendingTransactionsPerDatacenter}. When the queue is full, additional
+   * submissions are rejected via {@link ThreadPoolExecutor.AbortPolicy} and the rejection is reported back to
+   * the caller as a {@link RestServiceErrorCode#ServiceUnavailable} so the request fails fast instead of pinning
+   * Netty channel and request context in an unbounded queue.
    */
   private static class TransactionExecutor implements Closeable {
+    private final String datacenter;
     private final DataSource dataSource;
-    private final ExecutorService executor;
+    private final ThreadPoolExecutor executor;
+    private final Metrics metrics;
+    private final String queueSizeMetricName;
+    private final String activeCountMetricName;
+    private final String rejectedCountMetricName;
+    private final String enqueueWaitTimeMetricName;
+    private final String connectionFailureCountMetricName;
+    private final Counter rejectedCount;
+    private final Counter connectionFailureCount;
+    private final Histogram enqueueWaitTimeInMs;
+    private final int maxPendingTransactions;
 
-    TransactionExecutor(String datacenter, DataSource dataSource, int numThreads) {
+    TransactionExecutor(String datacenter, DataSource dataSource, int numThreads, int maxPendingTransactions,
+        Metrics metrics) {
+      this.datacenter = datacenter;
       this.dataSource = dataSource;
-      executor = Utils.newScheduler(numThreads, "Thread-" + datacenter, false);
+      this.metrics = metrics;
+      this.maxPendingTransactions = maxPendingTransactions;
+      this.executor = new ThreadPoolExecutor(numThreads, numThreads, 0L, TimeUnit.MILLISECONDS,
+          new LinkedBlockingQueue<>(maxPendingTransactions),
+          new Utils.SchedulerThreadFactory("Thread-" + datacenter, false), new ThreadPoolExecutor.AbortPolicy());
+
+      MetricRegistry registry = metrics.getMetricRegistry();
+      String prefix = metrics.getPrefix();
+      this.queueSizeMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "TransactionExecutorQueueSize." + datacenter);
+      this.activeCountMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "TransactionExecutorActiveCount." + datacenter);
+      this.rejectedCountMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobTransactionRejectedCount." + datacenter);
+      this.enqueueWaitTimeMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobEnqueueWaitTimeInMs." + datacenter);
+      this.connectionFailureCountMetricName =
+          MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBConnectionFailureCount." + datacenter);
+      // remove() before register() guards against duplicate-key errors when a previous instance
+      // (e.g. a test) registered the same metric name and was not closed.
+      registry.remove(queueSizeMetricName);
+      registry.remove(activeCountMetricName);
+      registry.remove(rejectedCountMetricName);
+      registry.remove(enqueueWaitTimeMetricName);
+      registry.remove(connectionFailureCountMetricName);
+      registry.register(queueSizeMetricName, (Gauge<Integer>) () -> executor.getQueue().size());
+      registry.register(activeCountMetricName, (Gauge<Integer>) () -> executor.getActiveCount());
+      this.rejectedCount = registry.counter(rejectedCountMetricName);
+      this.enqueueWaitTimeInMs = registry.histogram(enqueueWaitTimeMetricName);
+      this.connectionFailureCount = registry.counter(connectionFailureCountMetricName);
+    }
+
+    /**
+     * Whether the given throwable represents a JDBC connection failure (vs. any other SQL error).
+     *
+     * <p>Three independent positive signals, all spec-defined as connection-class:
+     * <ol>
+     *   <li>{@link SQLNonTransientConnectionException} — JDBC's non-transient connection-failure
+     *       subclass; MySQL {@code CommunicationsException} extends this.</li>
+     *   <li>{@link SQLTransientConnectionException} — JDBC's transient connection-failure subclass;
+     *       HikariCP wraps pool-acquisition timeouts as this.</li>
+     *   <li>{@link SQLException#getSQLState()} starting with {@code "08"} — ISO/SQL "Connection
+     *       exception" class (08001/08003/08004/08006/08007/08S01).</li>
+     * </ol>
+     *
+     * <p>The walk traverses both {@link Throwable#getCause()} and {@link SQLException#getNextException()}
+     * so wrapped/chained variants (e.g. RuntimeException-wrapped, Hikari-wrapped, batch error chains)
+     * are detected. SQLSTATE "40*" (transaction rollback), "57*" (operator intervention), and other
+     * adjacent classes are intentionally NOT counted — those are not connection failures.
+     */
+    private static boolean isConnectionFailure(Throwable t) {
+      if (t == null) {
+        return false;
+      }
+      Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+      Deque<Throwable> stack = new ArrayDeque<>();
+      stack.push(t);
+      while (!stack.isEmpty()) {
+        Throwable cur = stack.pop();
+        if (!seen.add(cur)) {
+          continue;
+        }
+        if (cur instanceof SQLNonTransientConnectionException || cur instanceof SQLTransientConnectionException) {
+          return true;
+        }
+        if (cur instanceof SQLException) {
+          String state = ((SQLException) cur).getSQLState();
+          if (state != null && state.startsWith("08")) {
+            return true;
+          }
+          SQLException next = ((SQLException) cur).getNextException();
+          if (next != null) {
+            stack.push(next);
+          }
+        }
+        Throwable cause = cur.getCause();
+        if (cause != null) {
+          stack.push(cause);
+        }
+      }
+      return false;
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
         Callback<T> callback) {
-      executor.submit(() -> {
-        try (Connection connection = dataSource.getConnection()) {
-          T result;
-          if (autoCommit) {
-            result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-          } else {
-            // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-            connection.setAutoCommit(false);
-            try {
+      final long enqueueTimeMs = System.currentTimeMillis();
+      try {
+        executor.submit(() -> {
+          enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
+          try (Connection connection = dataSource.getConnection()) {
+            T result;
+            if (autoCommit) {
               result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-              connection.commit();
-            } catch (Exception e) {
-              connection.rollback();
-              throw e;
-            } finally {
-              connection.setAutoCommit(true);
+            } else {
+              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
+              connection.setAutoCommit(false);
+              try {
+                result = transaction.run(container.getParentAccountId(), container.getId(), connection);
+                connection.commit();
+              } catch (Exception e) {
+                connection.rollback();
+                throw e;
+              } finally {
+                connection.setAutoCommit(true);
+              }
             }
+            callback.onCompletion(result, null);
+          } catch (Exception e) {
+            if (isConnectionFailure(e)) {
+              connectionFailureCount.inc();
+            }
+            callback.onCompletion(null, e);
           }
-          callback.onCompletion(result, null);
-        } catch (Exception e) {
-          callback.onCompletion(null, e);
-        }
-      });
+        });
+      } catch (RejectedExecutionException e) {
+        rejectTransaction(callback, e);
+      }
     }
 
     <T> void executeTransactionGeneric(boolean autoCommit, TransactionGeneric<T> transaction, Callback<T> callback) {
-      executor.submit(() -> {
-        try (Connection connection = dataSource.getConnection()) {
-          T result;
-          if (autoCommit) {
-            result = transaction.run(connection);
-          } else {
-            // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-            connection.setAutoCommit(false);
-            try {
+      final long enqueueTimeMs = System.currentTimeMillis();
+      try {
+        executor.submit(() -> {
+          enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
+          try (Connection connection = dataSource.getConnection()) {
+            T result;
+            if (autoCommit) {
               result = transaction.run(connection);
-              connection.commit();
-            } catch (Exception e) {
-              connection.rollback();
-              throw e;
-            } finally {
-              connection.setAutoCommit(true);
+            } else {
+              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
+              connection.setAutoCommit(false);
+              try {
+                result = transaction.run(connection);
+                connection.commit();
+              } catch (Exception e) {
+                connection.rollback();
+                throw e;
+              } finally {
+                connection.setAutoCommit(true);
+              }
             }
+            callback.onCompletion(result, null);
+          } catch (Exception e) {
+            if (isConnectionFailure(e)) {
+              connectionFailureCount.inc();
+            }
+            callback.onCompletion(null, e);
           }
-          callback.onCompletion(result, null);
-        } catch (Exception e) {
-          callback.onCompletion(null, e);
-        }
-      });
+        });
+      } catch (RejectedExecutionException e) {
+        rejectTransaction(callback, e);
+      }
+    }
+
+    private <T> void rejectTransaction(Callback<T> callback, RejectedExecutionException cause) {
+      // The per-datacenter rejected counter and TransactionExecutorQueueSize.<dc> /
+      // TransactionExecutorActiveCount.<dc> gauges are the operational signal here. Logging at warn
+      // would amplify log volume on the saturated path the bounded queue is designed to shed.
+      rejectedCount.inc();
+      logger.debug("Named blob DB transaction rejected for datacenter {}: queue full (size={}, capacity={})",
+          datacenter, executor.getQueue().size(), maxPendingTransactions);
+      callback.onCompletion(null,
+          new RestServiceException("Named blob DB transaction queue full for datacenter " + datacenter, cause,
+              RestServiceErrorCode.ServiceUnavailable));
     }
 
     public DataSource getDataSource() {
@@ -562,6 +843,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
     @Override
     public void close() {
+      // Close datasource and shut down the executor first; only then deregister metrics, so the
+      // per-datacenter gauges and counter remain observable while the executor is still draining
+      // in-flight transactions. A scrape that races with close() should see the drain progress
+      // rather than a hole.
       if (dataSource instanceof Closeable) {
         try {
           ((Closeable) dataSource).close();
@@ -570,6 +855,12 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         }
       }
       Utils.shutDownExecutorService(executor, 1, TimeUnit.MINUTES);
+      MetricRegistry registry = metrics.getMetricRegistry();
+      registry.remove(queueSizeMetricName);
+      registry.remove(activeCountMetricName);
+      registry.remove(rejectedCountMetricName);
+      registry.remove(enqueueWaitTimeMetricName);
+      registry.remove(connectionFailureCountMetricName);
     }
   }
 
@@ -619,17 +910,45 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
     String query = "";
-    String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY : LIST_WITH_PREFIX_SQL;
+    String queryStatement = blobNamePrefix == null ? LIST_ALL_SQL : LIST_WITH_PREFIX_SQL;
     int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       if (blobNamePrefix == null) {
-        constructListAllQuery(statement, accountId, containerId, pageToken, maxKeysValue);
-      } else {
-        if (config.listNamedBlobsSQLOption == MySqlNamedBlobDbConfig.MIN_LIST_NAMED_BLOBS_SQL_OPTION) {
-          constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
-        } else {
-          constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+        // The no-prefix LIST_ALL_SQL placeholder count differs by option: options 2/3 bind 5 params,
+        // option 4 (correlated subquery) binds 7. Keep the binder in lockstep with getListAllSQLStatement.
+        switch (config.listNamedBlobsSQLOption) {
+          case 2:
+          case 3:
+            constructListAllQuery(statement, accountId, containerId, pageToken, maxKeysValue);
+            break;
+          case 4:
+            constructListAllQueryV4(statement, accountId, containerId, pageToken, maxKeysValue);
+            break;
+          default:
+            throw new IllegalStateException(
+                "Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
         }
+      } else {
+        switch (config.listNamedBlobsSQLOption) {
+          case 2:
+            constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          case 3:
+            constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          case 4:
+            constructListQueryWithPrefixV4(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            break;
+          default:
+            throw new IllegalStateException(
+                "Invalid listNamedBlobsSQLOption: " + config.listNamedBlobsSQLOption);
+        }
+      }
+      // Bound the LIST against an unexpectedly large container. With a positive timeout the driver cancels the
+      // statement and the server throws a SQLException (cleanly), instead of the query running past a shorter
+      // network/socket timeout and tearing the connection ("Communications link failure" -> HTTP 500).
+      if (config.listQueryTimeoutSeconds > 0) {
+        statement.setQueryTimeout(config.listQueryTimeoutSeconds);
       }
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
@@ -672,12 +991,36 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private void constructListAllQuery(PreparedStatement statement, short accountId, short containerId, String pageToken,
       int maxKeysValue) throws SQLException {
-    // list-all no prefix
+    // list-all no prefix (options 2/3 legacy INNER JOIN form, 5 params)
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);
     statement.setString(3, pageToken);
     statement.setString(4, pageToken);
     statement.setInt(5, maxKeysValue + 1);
+  }
+
+  /**
+   * Construct the no-prefix LIST_ALL query when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 4.
+   * Option 4's no-prefix form is a correlated subquery (see {@link #getListAllSQLStatement}) and binds seven
+   * parameters: (account_id, container_id, pageToken for the NULL guard, pageToken for blob_name >= cursor,
+   * subquery account_id, subquery container_id, LIMIT). A null pageToken (first page) short-circuits the
+   * {@code ? IS NULL} guard so the scan lists from the start of the container.
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param pageToken The page token (null on the first page)
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListAllQueryV4(PreparedStatement statement, short accountId, short containerId,
+      String pageToken, int maxKeysValue) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, pageToken);
+    statement.setString(4, pageToken);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setInt(7, maxKeysValue + 1);
   }
 
   /**
@@ -714,6 +1057,31 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * @throws SQLException
    */
   private void constructListQueryWithPrefixV3(PreparedStatement statement, short accountId, short containerId,
+      String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, blobNamePrefix + "%");
+    statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setInt(7, maxKeysValue + 1);
+  }
+
+  /**
+   * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 4.
+   * Option 4 now uses a correlated subquery (see {@link #getListWithPrefixSQLStatement}) and binds seven
+   * parameters: (account_id, container_id, blob_name LIKE prefix%, blob_name >= cursor, account_id,
+   * container_id, LIMIT). Params 5 and 6 feed the inner MAX(version) subquery. Identical to
+   * {@link #constructListQueryWithPrefixV3}.
+   * @param statement The {@link PreparedStatement} to set the parameters on.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param blobNamePrefix The blobname prefix
+   * @param pageToken The page token
+   * @param maxKeysValue The max key to return
+   * @throws SQLException
+   */
+  private void constructListQueryWithPrefixV4(PreparedStatement statement, short accountId, short containerId,
       String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);
@@ -840,20 +1208,40 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * At the end, if the last considered blob is IN_PROGRESS and older than the cutoff, it is also marked stale.
    *
    * @param blobList      The list of StaleNamedBlob objects to process. Should be sorted by blob name and timestamp.
-   * @param cutoffDays    The number of days used to calculate the cutoff timestamp for staleness.
+   * @param cutoffDays    The number of days used to calculate the cutoff timestamp for IN_PROGRESS staleness.
+   * @param retentionVersions The number of most-recent versions to keep per blob name; stale versions ranked beyond
+   *                      this are cleaned up. Always at least 1 (the current version is retained).
+   * @param readyRetentionDays The maximum age (days) of a stale READY version to keep; older stale versions are
+   *                      cleaned up regardless of the version count. 0 disables age-based cleanup.
    * @return A StaleBlobsWithLatestBlobName object containing the list of stale blobs
    *                      and the name of the latest blob considered.
    */
-  public StaleBlobsWithLatestBlobName getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutoffDays) {
+  public StaleBlobsWithLatestBlobName getStaleBlobsForActiveContainer(List<StaleNamedBlob> blobList, int cutoffDays,
+      int retentionVersions, int readyRetentionDays) {
     List<StaleNamedBlob> staleBlobs = new ArrayList<>();
     if (blobList.isEmpty()) {
       return new StaleBlobsWithLatestBlobName(staleBlobs, null);
     }
 
-    long cutoffTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(cutoffDays);
-    Timestamp cutoffTimestamp = new Timestamp(cutoffTime);
+    long now = System.currentTimeMillis();
+    // cutoffTimestamp (from cutoffDays / staleDataRetentionDays) governs IN_PROGRESS (incomplete-upload) staleness.
+    Timestamp cutoffTimestamp = new Timestamp(now - TimeUnit.DAYS.toMillis(cutoffDays));
+    // readyRetentionCutoff (from readyRetentionDays / staleReadyDataRetentionDays) governs superseded READY versions:
+    // a stale READY version is cleaned up when it is ranked beyond the newest retentionVersions, or (when
+    // readyRetentionDays > 0) when it is older than that many days. The current (latest) version is always kept.
+    int versionsToKeep = Math.max(retentionVersions, 1);
+    Timestamp readyRetentionCutoff =
+        readyRetentionDays > 0 ? new Timestamp(now - TimeUnit.DAYS.toMillis(readyRetentionDays)) : null;
 
     StaleNamedBlob keepBlob = blobList.get(0);
+    // Number of READY versions seen so far in the current blob-name group (the latest READY is rank 1). Note this rank
+    // is per invocation, i.e. per page: the caller pages the container via getAllBlobsForContainer (LIMIT
+    // queryStaleDataMaxResults), so a blob name with more READY versions than one page is ranked within each page, not
+    // across the whole blob name. This is safe: the page cursor is "blob_name >= ..." and already-cleaned rows are
+    // filtered out by deleted_ts, so each subsequent page re-ranks from the newest surviving version and converges.
+    // The worst case is extra passes / temporary over-retention, never over-deletion (the newest N are always rank
+    // 1..N and are never marked stale).
+    int readyVersionsSeen = keepBlob.getBlobState() == NamedBlobState.READY ? 1 : 0;
     for (int i = 1; i < blobList.size(); i++) {
       StaleNamedBlob currentBlob = blobList.get(i);
 
@@ -862,6 +1250,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           staleBlobs.add(keepBlob);
         }
         keepBlob = currentBlob;
+        readyVersionsSeen = currentBlob.getBlobState() == NamedBlobState.READY ? 1 : 0;
         continue;
       }
 
@@ -875,8 +1264,15 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           staleBlobs.add(keepBlob);
         }
         keepBlob = currentBlob;
+        readyVersionsSeen = 1;
       } else if (keepBlobState == NamedBlobState.READY && currentBlobState == NamedBlobState.READY) {
-        staleBlobs.add(currentBlob);
+        readyVersionsSeen++;
+        boolean beyondVersionLimit = readyVersionsSeen > versionsToKeep;
+        boolean olderThanRetention =
+            readyRetentionCutoff != null && currentBlobModifiedTS.before(readyRetentionCutoff);
+        if (beyondVersionLimit || olderThanRetention) {
+          staleBlobs.add(currentBlob);
+        }
       } else if (keepBlobState == NamedBlobState.IN_PROGRESS && currentBlobState == NamedBlobState.IN_PROGRESS) {
         if (keepBlobModifiedTS.after(cutoffTimestamp) && currentBlobModifiedTS.before(cutoffTimestamp)) {
           staleBlobs.add(currentBlob);
@@ -923,14 +1319,14 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * @throws SQLException If a database access error occurs or the query fails.
    */
   private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container,
-      String latestBlobName) throws SQLException {
+      String latestBlobName, int maxResults) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
 
     try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CONTAINER)) {
       statement.setInt(1, container.getId());
       statement.setInt(2, container.getParentAccountId());
       statement.setString(3, latestBlobName);
-      statement.setInt(4, config.queryStaleDataMaxResults);
+      statement.setInt(4, maxResults);
 
       logger.info("Pulling potential stale blobs from MySql. Query {}", statement.toString());
 
