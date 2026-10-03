@@ -23,6 +23,7 @@ import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
+import com.github.ambry.rest.DeleteRequestMetrics;
 import com.github.ambry.utils.AsyncOperationTracker;
 
 
@@ -36,6 +37,10 @@ public class FrontendMetrics {
   // RestRequestMetricsGroup
   // DELETE
   public final RestRequestMetricsGroup deleteBlobMetricsGroup;
+  public final DeleteRequestMetrics deleteBlobRequestMetrics;
+  public final DeleteRequestMetrics deleteBlobSslRequestMetrics;
+  public final DeleteRequestMetrics batchDeleteBlobRequestMetrics;
+  public final DeleteRequestMetrics batchDeleteBlobSslRequestMetrics;
   public final RestRequestMetricsGroup batchDeleteMetricsGroup;
   public final RestRequestMetricsGroup deleteDatasetsMetricsGroup;
   //COPY
@@ -334,6 +339,14 @@ public class FrontendMetrics {
     deleteBlobMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "DeleteBlob", false, metricRegistry,
             frontendConfig);
+    deleteBlobRequestMetrics =
+        new DeleteRequestMetrics(FrontendRestRequestService.class, "DeleteBlob", metricRegistry);
+    deleteBlobSslRequestMetrics =
+        new DeleteRequestMetrics(FrontendRestRequestService.class, "DeleteBlobSsl", metricRegistry);
+    batchDeleteBlobRequestMetrics =
+        new DeleteRequestMetrics(FrontendRestRequestService.class, "BatchDeleteBlob", metricRegistry);
+    batchDeleteBlobSslRequestMetrics =
+        new DeleteRequestMetrics(FrontendRestRequestService.class, "BatchDeleteBlobSsl", metricRegistry);
     batchDeleteMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "BatchDeleteBlob", false, metricRegistry,
             frontendConfig);

@@ -57,6 +57,7 @@ public class RestRequestMetricsTracker {
   private final AtomicBoolean metricsRecorded = new AtomicBoolean(false);
   private RestRequestMetrics metrics = defaultMetrics;
   private ContainerMetrics containerMetrics;
+  private volatile DeleteRequestMetrics.Tracker deleteRequestTracker;
   private boolean failed = false;
   private boolean satisfied = true;
   private boolean serverError = false;
@@ -274,6 +275,14 @@ public class RestRequestMetricsTracker {
     this.containerMetrics = containerMetrics;
   }
 
+  public DeleteRequestMetrics.Tracker getDeleteRequestTracker() {
+    return deleteRequestTracker;
+  }
+
+  public void setDeleteRequestTracker(DeleteRequestMetrics.Tracker deleteRequestTracker) {
+    this.deleteRequestTracker = deleteRequestTracker;
+  }
+
   /**
    * Marks that the server's idle timeout terminated this request.
    * @return {@code true} if this call claimed the request termination, or {@code false} if another path already did.
@@ -314,6 +323,10 @@ public class RestRequestMetricsTracker {
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
         metrics.nioTimeToFirstByteInMs.update(nioMetricsTracker.timeToFirstByteInMs);
+        DeleteRequestMetrics.Tracker deleteTracker = deleteRequestTracker;
+        if (deleteTracker != null) {
+          deleteTracker.recordMetrics(nioMetricsTracker.timeToFirstByteInMs);
+        }
 
         metrics.scRequestProcessingTimeInMs.update(scalingMetricsTracker.requestProcessingTimeInMs.get());
         metrics.scRequestProcessingWaitTimeInMs.update(scalingMetricsTracker.requestProcessingWaitTimeInMs.get());
