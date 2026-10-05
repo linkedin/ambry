@@ -2247,20 +2247,49 @@ public class FrontendRestRequestServiceTest {
 
   @Test
   public void testGeneratedIdResponseMapping() throws Exception {
+    assertEquals("ambry-internal-key-generatedBlobIdServerErrorEnabled",
+        InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED);
+    assertSame(frontendMetrics.generatedBlobIdError,
+        metricRegistry.getCounters().get(MetricRegistry.name(FrontendRestRequestService.class, "GeneratedBlobIdError")));
     for (Object context : new Object[]{null, false, true, "true"}) {
-      for (RouterErrorCode code : RouterErrorCode.values()) {
-        try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
-          if (context != null) {
-            request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, context);
+      for (Object gate : new Object[]{null, false, true, "true"}) {
+        for (RouterErrorCode code : RouterErrorCode.values()) {
+          try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
+            if (context != null) {
+              request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, context);
+            }
+            if (gate != null) {
+              request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, gate);
+            }
+            RouterException error = new RouterException("router failure", code);
+            MockRestResponseChannel response = spy(new MockRestResponseChannel());
+            long countBefore = frontendMetrics.generatedBlobIdError.getCount();
+            frontendRestRequestService.submitResponse(request, response, null, error);
+            boolean generatedIdError = Boolean.TRUE.equals(context) && code == RouterErrorCode.InvalidBlobId;
+            RestServiceErrorCode expected = generatedIdError && Boolean.TRUE.equals(gate)
+                ? RestServiceErrorCode.InternalServerError : RestServiceErrorCode.getRestServiceErrorCode(code);
+            assertEquals(ResponseStatus.getResponseStatus(expected), response.getStatus());
+            assertSame(error, response.getException().getCause());
+            assertEquals(countBefore + (generatedIdError ? 1 : 0), frontendMetrics.generatedBlobIdError.getCount());
+            verify(response).onResponseComplete(any());
           }
-          RouterException error = new RouterException("router failure", code);
-          MockRestResponseChannel response = new MockRestResponseChannel();
-          frontendRestRequestService.submitResponse(request, response, null, error);
-          RestServiceErrorCode expected = Boolean.TRUE.equals(context) && code == RouterErrorCode.InvalidBlobId
-              ? RestServiceErrorCode.InternalServerError : RestServiceErrorCode.getRestServiceErrorCode(code);
-          assertEquals(ResponseStatus.getResponseStatus(expected), response.getStatus());
-          assertSame(error, response.getException().getCause());
         }
+      }
+    }
+  }
+
+  @Test
+  public void testGeneratedIdCounterIgnoresNonRouterFailures() throws Exception {
+    for (Exception error : new Exception[]{null, new RestServiceException("invalid input", RestServiceErrorCode.BadRequest),
+        new RuntimeException("failure")}) {
+      try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
+        request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, true);
+        request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, true);
+        MockRestResponseChannel response = new MockRestResponseChannel();
+        long countBefore = frontendMetrics.generatedBlobIdError.getCount();
+        frontendRestRequestService.submitResponse(request, response, null, error);
+        assertSame(error, response.getException());
+        assertEquals(countBefore, frontendMetrics.generatedBlobIdError.getCount());
       }
     }
   }
@@ -2344,6 +2373,8 @@ public class FrontendRestRequestServiceTest {
           clearInvocations(router);
           try (RestRequest request = createRestRequest(method, uri, headers,
               new LinkedList<>(Arrays.asList(ByteBuffer.wrap(body), null)))) {
+            request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, true);
+            long countBefore = frontendMetrics.generatedBlobIdError.getCount();
             RestServiceErrorCode expected;
             if (failure instanceof RouterException
                 && ((RouterException) failure).getErrorCode() == RouterErrorCode.BlobTooLarge) {
@@ -2357,6 +2388,8 @@ public class FrontendRestRequestServiceTest {
             assertException(RestServiceException.class, () -> doOperation(request, response),
                 e -> assertEquals(uri + ":" + stage, expected, e.getErrorCode()));
             assertEquals(uri + ":" + stage, ResponseStatus.getResponseStatus(expected), response.getStatus());
+            assertEquals(countBefore + (expected == RestServiceErrorCode.InternalServerError ? 1 : 0),
+                frontendMetrics.generatedBlobIdError.getCount());
             verify(response).onResponseComplete(any());
             if (parseGeneratedId) {
               assertEquals(RouterErrorCode.InvalidBlobId,
@@ -2387,8 +2420,11 @@ public class FrontendRestRequestServiceTest {
         headers.put(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, "true");
         try (RestRequest request = createRestRequest(put ? RestMethod.PUT : RestMethod.valueOf(operation),
             put ? "/" + operation : "/" + blobId, headers, null)) {
+          request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, true);
+          long countBefore = frontendMetrics.generatedBlobIdError.getCount();
           assertEquals(ResponseStatus.BadRequest,
               verifyOperationFailure(request, RestServiceErrorCode.BadRequest).getStatus());
+          assertEquals(countBefore, frontendMetrics.generatedBlobIdError.getCount());
         }
       }
     }

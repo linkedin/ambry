@@ -561,7 +561,7 @@ class FrontendRestRequestService implements RestRequestService, RestRequestMetri
   /**
    * Submits the response and {@code responseBody} (and any {@code exception})for the {@code restRequest} to the
    * {@code responseHandler}.
-   * InvalidBlobId is a server error only while consuming a server-generated upload ID.
+   * Invalid generated upload IDs are always counted; server-error classification requires an enabled request gate.
    * @param restRequest the {@link RestRequest} for which a response is ready.
    * @param restResponseChannel the {@link RestResponseChannel} over which the response can be sent.
    * @param responseBody the body of the response in the form of a {@link ReadableStreamChannel}.
@@ -577,9 +577,14 @@ class FrontendRestRequestService implements RestRequestService, RestRequestMetri
       }
       if (exception instanceof RouterException) {
         RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
-        RestServiceErrorCode errorCode = routerErrorCode == RouterErrorCode.InvalidBlobId
-            && Boolean.TRUE.equals(restRequest.getArgs().get(BLOB_ID_IS_SERVER_GENERATED))
-            ? RestServiceErrorCode.InternalServerError : RestServiceErrorCode.getRestServiceErrorCode(routerErrorCode);
+        RestServiceErrorCode errorCode = RestServiceErrorCode.getRestServiceErrorCode(routerErrorCode);
+        if (routerErrorCode == RouterErrorCode.InvalidBlobId
+            && Boolean.TRUE.equals(restRequest.getArgs().get(BLOB_ID_IS_SERVER_GENERATED))) {
+          frontendMetrics.generatedBlobIdError.inc();
+          if (Boolean.TRUE.equals(restRequest.getArgs().get(GENERATED_BLOB_ID_SERVER_ERROR_ENABLED))) {
+            errorCode = RestServiceErrorCode.InternalServerError;
+          }
+        }
         exception = new RestServiceException(exception, errorCode);
       }
       responseHandler.handleResponse(restRequest, restResponseChannel, responseBody, exception);
