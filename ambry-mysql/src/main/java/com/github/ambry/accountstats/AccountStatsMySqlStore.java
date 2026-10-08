@@ -29,6 +29,7 @@ import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 import com.github.ambry.utils.JsonUtil;
+import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
@@ -61,7 +62,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   private static final ObjectMapper objectMapper = JsonUtil.newObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
   public static final String[] TABLES =
-      {AccountReportsDao.ACCOUNT_REPORTS_TABLE, AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE,
+      {AccountReportsDao.ACCOUNT_REPORTS_TABLE, HostAccountReportsStateDao.HOST_ACCOUNT_REPORTS_STATE_TABLE,
+          AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE,
           AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
           AggregatedAccountReportsDao.MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
           PartitionClassReportsDao.PARTITION_CLASS_NAMES_TABLE, PartitionClassReportsDao.PARTITIONS_TABLE,
@@ -69,6 +71,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
 
   private final DataSource dataSource;
   private final AccountReportsDao accountReportsDao;
+  private final HostAccountReportsStateDao hostAccountReportsStateDao;
   private final AggregatedAccountReportsDao aggregatedAccountReportsDao;
   private final PartitionClassReportsDao partitionClassReportsDao;
   private final HostnameHelper hostnameHelper;
@@ -172,6 +175,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     MySqlMetrics mySqlMetrics = new MySqlMetrics(AccountStatsMySqlStore.class, registry);
     this.dataSource = dataSource;
     accountReportsDao = new AccountReportsDao(dataSource, mySqlMetrics);
+    hostAccountReportsStateDao = new HostAccountReportsStateDao(dataSource, mySqlMetrics);
     aggregatedAccountReportsDao = new AggregatedAccountReportsDao(dataSource, mySqlMetrics);
     partitionClassReportsDao = new PartitionClassReportsDao(dataSource, mySqlMetrics);
     this.hostnameHelper = hostnameHelper;
@@ -192,6 +196,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   @Override
   public void storeHostAccountStorageStats(HostAccountStorageStatsWrapper statsWrapper) throws Exception {
+    HostAccountReportsStateDao.State reportState =
+        hostAccountReportsStateDao.markReportStarted(clusterName, hostname, statsWrapper.getHeader().getTimestamp(),
+            statsWrapper.getStats().getStorageStats().keySet().stream().sorted().map(String::valueOf)
+                .collect(Collectors.joining(",")));
     AccountReportsDao.StorageBatchUpdater batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
@@ -234,6 +242,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     storeMetrics.insertAccountStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
 
     deleteContainerAccountStats(prevPartitionMap, currPartitionMap);
+    hostAccountReportsStateDao.markReportComplete(clusterName, hostname, reportState.getReportVersion());
     storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     previousHostAccountStorageStatsWrapper = statsWrapper;
     writeStatsToLocalBackupFile();
@@ -244,6 +253,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     long startTimeMs = System.currentTimeMillis();
     hostname = hostnameHelper.simplifyHostname(hostname, port);
     accountReportsDao.deleteStorageUsageForHost(clusterName, hostname);
+    hostAccountReportsStateDao.deleteState(clusterName, hostname);
     storeMetrics.deleteAccountStatsHostTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
@@ -337,6 +347,29 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     return queryHostAccountStorageStatsBySimplifiedHostName(queryHostname);
   }
 
+  @Override
+  public HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHostForRecovery(String queryHostname, int port,
+      long minimumReportTimestampMs) throws SQLException {
+    queryHostname = hostnameHelper.simplifyHostname(queryHostname, port);
+    HostAccountReportsStateDao.State before = hostAccountReportsStateDao.queryState(clusterName, queryHostname);
+    if (before == null || !before.isComplete() || before.getReportTimestampMs() < minimumReportTimestampMs) {
+      return null;
+    }
+    HostAccountStorageStatsWrapper statsWrapper = queryHostAccountStorageStatsBySimplifiedHostName(queryHostname);
+    HostAccountReportsStateDao.State after = hostAccountReportsStateDao.queryState(clusterName, queryHostname);
+    if (!before.equals(after)) {
+      return null;
+    }
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> storageStats =
+        new HashMap<>(statsWrapper.getStats().getStorageStats());
+    if (!before.getReportedPartitions().isEmpty()) {
+      for (String partitionId : before.getReportedPartitions().split(",")) {
+        storageStats.putIfAbsent(Long.parseLong(partitionId), Collections.emptyMap());
+      }
+    }
+    return new HostAccountStorageStatsWrapper(statsWrapper.getHeader(), new HostAccountStorageStats(storageStats));
+  }
+
   /**
    * Query mysql database to get all the container storage usage for given {@code clusterName} and {@code queryHostname} and
    * construct a {@link HostAccountStorageStatsWrapper} from them
@@ -423,9 +456,27 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
+  public Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState>
+      queryMonthlyAggregatedAccountStorageStatsAndState() throws Exception {
+    long startTimeMs = System.currentTimeMillis();
+    Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState> result =
+        aggregatedAccountReportsDao.queryMonthlySnapshotAndStateForCluster(clusterName);
+    storeMetrics.queryMonthlyAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return result;
+  }
+
+  @Override
   public String queryRecordedMonth() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     String result = aggregatedAccountReportsDao.queryMonthForCluster(clusterName);
+    storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return result;
+  }
+
+  @Override
+  public AggregatedAccountReportsState queryAggregatedAccountReportsState() throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    AggregatedAccountReportsState result = aggregatedAccountReportsDao.queryStateForCluster(clusterName);
     storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
   }
@@ -439,9 +490,21 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   @Override
   public void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception {
     long startTimeMs = System.currentTimeMillis();
-    aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
-    aggregatedAccountReportsDao.updateMonth(clusterName, monthValue);
+    aggregatedAccountReportsDao.replaceMonthlySnapshotForCluster(clusterName, monthValue);
     storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
+  public boolean updateAggregatedAccountReportsState(AggregatedAccountReportsState expectedState, String monthValue,
+      long aggregationTimeMs, String recoveryMonth, boolean takeSnapshot, boolean deleteInvalidData) throws Exception {
+    long startTimeMs = System.currentTimeMillis();
+    boolean updated =
+        aggregatedAccountReportsDao.updateAggregationStateForCluster(expectedState, clusterName, monthValue,
+            aggregationTimeMs, recoveryMonth, takeSnapshot, deleteInvalidData);
+    if (takeSnapshot) {
+      storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    }
+    return updated;
   }
 
   @Override
