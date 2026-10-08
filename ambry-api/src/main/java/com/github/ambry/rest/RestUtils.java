@@ -515,6 +515,11 @@ public class RestUtils {
     public static final String REQUEST_PATH = KEY_PREFIX + "request-path";
 
     /**
+     * Boolean context for consuming a server-generated upload ID. Cleared after successful conversion or TTL promotion.
+     */
+    public static final String BLOB_ID_IS_SERVER_GENERATED = KEY_PREFIX + "blob-id-is-server-generated";
+
+    /**
      * The internal header to determine if the delete request is coming from a dataset deletion.
      */
     public static final String DATASET_DELETE_ENABLED = KEY_PREFIX + "dataset-delete-enabled";

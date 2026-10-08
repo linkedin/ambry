@@ -536,6 +536,7 @@ public class PostBlobHandlerTest {
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      assertNull(request.getArgs().get(BLOB_ID_IS_SERVER_GENERATED));
       assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       Object metadata = request.getArgs().get(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY);
       if (chunkUpload) {
@@ -694,6 +695,7 @@ public class PostBlobHandlerTest {
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      assertNull(request.getArgs().get(BLOB_ID_IS_SERVER_GENERATED));
       assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
       assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks, blob.getStitchedChunks());

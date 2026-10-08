@@ -563,6 +563,7 @@ public class NamedBlobPutHandlerTest {
       namedBlobPutHandler.handle(request, restResponseChannel, future::done);
       if (errorChecker == null) {
         future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+        assertNull(request.getArgs().get(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
         // in id converter, the callback is invoked before the lastConvertedId is set, we need to wait
         // for a while before we can check the lastConvertedId.
         Thread.sleep(100);
@@ -731,6 +732,7 @@ public class NamedBlobPutHandlerTest {
     namedBlobPutHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      assertNull(request.getArgs().get(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
       // in id converter, the callback is invoked before the lastConvertedId is set, we need to wait
       // for a while before we can check the lastConvertedId.
       Thread.sleep(100);

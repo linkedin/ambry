@@ -223,9 +223,10 @@ class PostBlobHandler {
      * @return a {@link Callback} to be used with {@link Router#putBlob}.
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo)), uri, LOGGER,
-          finalCallback);
+      return buildCallback(frontendMetrics.postRouterStitchBlobMetrics, blobId -> {
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED, true);
+        idConverter.convert(restRequest, blobId, blobInfo.getBlobProperties(), idConverterCallback(blobInfo));
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -238,6 +239,7 @@ class PostBlobHandler {
       return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
         setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
         restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED, true);
         idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
       }, uri, LOGGER, finalCallback);
     }
@@ -250,6 +252,7 @@ class PostBlobHandler {
      */
     private Callback<String> idConverterCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
+        restRequest.removeArg(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED);
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);

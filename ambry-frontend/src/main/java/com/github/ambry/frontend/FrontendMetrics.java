@@ -255,6 +255,7 @@ public class FrontendMetrics {
   // Errors
   // FrontendRestRequestService
   public final Counter responseSubmissionError;
+  public final Counter generatedBlobIdError;
   public final Counter resourceReleaseError;
   public final Counter ttlTooLargeError;
   public final Counter ttlNotCompliantError;
@@ -709,6 +710,8 @@ public class FrontendMetrics {
     // FrontendRestRequestService
     responseSubmissionError =
         metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "ResponseSubmissionError"));
+    generatedBlobIdError =
+        metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "GeneratedBlobIdError"));
     resourceReleaseError =
         metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "ResourceReleaseError"));
     // DeleteCallback

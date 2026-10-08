@@ -104,6 +104,7 @@ public class S3PutHandlerTest {
     restResponseChannel.setStatus(ResponseStatus.Created);
     s3PutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
+    assertNull(request.getArgs().get(BLOB_ID_IS_SERVER_GENERATED));
 
     // Verify Upsert header is set by default for S3 uploads.
     assertTrue("Upsert header must be present", request.getArgs().containsKey(NAMED_UPSERT));

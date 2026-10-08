@@ -1088,6 +1088,7 @@ public class NonBlockingRouter implements Router {
           blobProperties.setBlobSize(restRequest.getBlobBytesReceived());
         }
         // Call idConverter.convert after putBlob succeeds
+        restRequest.setArg(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED, true);
         idConverter.convert(restRequest, blobId, blobProperties, callback);
       }
     };

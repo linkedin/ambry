@@ -244,6 +244,7 @@ public class NamedBlobPutHandler {
         restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
+        restRequest.setArg(BLOB_ID_IS_SERVER_GENERATED, true);
         String blobIdClean = stripPrefixAndExtension(blobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
@@ -254,6 +255,7 @@ public class NamedBlobPutHandler {
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
               routerTtlUpdateCallbackForPut(blobInfo));
         } else {
+          restRequest.removeArg(BLOB_ID_IS_SERVER_GENERATED);
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
             updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
@@ -291,6 +293,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo, BlobProperties propertiesForRouterUpload) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics, convertedBlobId -> {
+        restRequest.setArg(BLOB_ID_IS_SERVER_GENERATED, true);
         // The actual blob size is now present in the instance of BlobProperties passed to the router.stitchBlob().
         // Update it in the BlobInfo so that IdConverter can add it to the named blob DB
         blobInfo.getBlobProperties().setBlobSize(propertiesForRouterUpload.getBlobSize());
@@ -305,6 +308,7 @@ public class NamedBlobPutHandler {
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
               routerTtlUpdateCallbackForStitch(blobInfo));
         } else {
+          restRequest.removeArg(BLOB_ID_IS_SERVER_GENERATED);
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             //Make sure to process response after delete finished
             updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
@@ -335,6 +339,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> routerTtlUpdateCallbackForPut(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        restRequest.removeArg(BLOB_ID_IS_SERVER_GENERATED);
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
@@ -354,6 +359,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> routerTtlUpdateCallbackForStitch(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        restRequest.removeArg(BLOB_ID_IS_SERVER_GENERATED);
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
