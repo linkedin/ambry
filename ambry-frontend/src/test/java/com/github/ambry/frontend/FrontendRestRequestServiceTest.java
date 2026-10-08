@@ -2249,27 +2249,23 @@ public class FrontendRestRequestServiceTest {
   public void testGeneratedIdResponseMapping() throws Exception {
     assertSame(frontendMetrics.generatedBlobIdError,
         metricRegistry.getCounters().get(MetricRegistry.name(FrontendRestRequestService.class, "GeneratedBlobIdError")));
-    for (String configuredValue : new String[]{null, "false", "true"}) {
-      setupGeneratedIdConfig(configuredValue);
-      for (Object context : new Object[]{null, false, true, "true"}) {
-        for (RouterErrorCode code : RouterErrorCode.values()) {
-          try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
-            if (context != null) {
-              request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, context);
-            }
-            RouterException error = new RouterException("router failure", code);
-            MockRestResponseChannel response = spy(new MockRestResponseChannel());
-            long countBefore = frontendMetrics.generatedBlobIdError.getCount();
-            frontendRestRequestService.submitResponse(request, response, null, error);
-            boolean generatedIdError = Boolean.TRUE.equals(context) && code == RouterErrorCode.InvalidBlobId;
-            RestServiceErrorCode expected = generatedIdError && Boolean.parseBoolean(configuredValue)
-                ? RestServiceErrorCode.InternalServerError : RestServiceErrorCode.getRestServiceErrorCode(code);
-            assertEquals(ResponseStatus.getResponseStatus(expected), response.getStatus());
-            assertSame(error, response.getException().getCause());
-            assertEquals(countBefore + (generatedIdError ? 1 : 0), frontendMetrics.generatedBlobIdError.getCount());
-            assertEquals(0, frontendMetrics.responseSubmissionError.getCount());
-            verify(response).onResponseComplete(any());
+    for (Object context : new Object[]{null, false, true, "true"}) {
+      for (RouterErrorCode code : RouterErrorCode.values()) {
+        try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
+          if (context != null) {
+            request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, context);
           }
+          RouterException error = new RouterException("router failure", code);
+          MockRestResponseChannel response = spy(new MockRestResponseChannel());
+          long countBefore = frontendMetrics.generatedBlobIdError.getCount();
+          frontendRestRequestService.submitResponse(request, response, null, error);
+          boolean generatedIdError = Boolean.TRUE.equals(context) && code == RouterErrorCode.InvalidBlobId;
+          assertEquals(ResponseStatus.getResponseStatus(RestServiceErrorCode.getRestServiceErrorCode(code)),
+              response.getStatus());
+          assertSame(error, response.getException().getCause());
+          assertEquals(countBefore + (generatedIdError ? 1 : 0), frontendMetrics.generatedBlobIdError.getCount());
+          assertEquals(0, frontendMetrics.responseSubmissionError.getCount());
+          verify(response).onResponseComplete(any());
         }
       }
     }
@@ -2277,7 +2273,6 @@ public class FrontendRestRequestServiceTest {
 
   @Test
   public void testGeneratedIdCounterIgnoresNonRouterFailures() throws Exception {
-    setupGeneratedIdConfig("true");
     for (Exception error : new Exception[]{null, new RestServiceException("invalid input", RestServiceErrorCode.BadRequest),
         new RuntimeException("failure")}) {
       try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
@@ -2302,8 +2297,8 @@ public class FrontendRestRequestServiceTest {
     idConverterFactory = converterFactory;
     router = spy(router);
     doReturn(converterFactory.getIdConverter()).when(router).getIdConverter();
-    setupGeneratedIdConfig("true");
-    frontendRestRequestService = spy(frontendRestRequestService);
+    frontendRestRequestService = spy(getFrontendRestRequestService());
+    frontendRestRequestService.start();
     String namedPath = "/named/" + refAccount.getName() + "/" + refContainer.getName() + "/blob";
     String s3Path = namedPath.replace("/named/", "/s3/");
     String chunkId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
@@ -2375,17 +2370,16 @@ public class FrontendRestRequestServiceTest {
             if (failure instanceof RouterException
                 && ((RouterException) failure).getErrorCode() == RouterErrorCode.BlobTooLarge) {
               expected = RestServiceErrorCode.RequestTooLarge;
-            } else if (failure instanceof RouterException && !stage.equals("router")) {
-              expected = RestServiceErrorCode.InternalServerError;
             } else {
               expected = RestServiceErrorCode.BadRequest;
             }
+            boolean generatedIdError = !stage.equals("router") && failure instanceof RouterException
+                && ((RouterException) failure).getErrorCode() == RouterErrorCode.InvalidBlobId;
             MockRestResponseChannel response = spy(new MockRestResponseChannel());
             assertException(RestServiceException.class, () -> doOperation(request, response),
                 e -> assertEquals(uri + ":" + stage, expected, e.getErrorCode()));
             assertEquals(uri + ":" + stage, ResponseStatus.getResponseStatus(expected), response.getStatus());
-            assertEquals(countBefore + (expected == RestServiceErrorCode.InternalServerError ? 1 : 0),
-                frontendMetrics.generatedBlobIdError.getCount());
+            assertEquals(countBefore + (generatedIdError ? 1 : 0), frontendMetrics.generatedBlobIdError.getCount());
             verify(response).onResponseComplete(any());
             if (parseGeneratedId) {
               assertEquals(RouterErrorCode.InvalidBlobId,
@@ -2406,7 +2400,6 @@ public class FrontendRestRequestServiceTest {
 
   @Test
   public void testClientBlobIdErrorsRemainBadRequest() throws Exception {
-    setupGeneratedIdConfig("true");
     Properties properties = new Properties();
     properties.setProperty(InMemoryRouter.OPERATION_THROW_ROUTER_EXCEPTION, RouterErrorCode.InvalidBlobId.name());
     router.setVerifiableProperties(new VerifiableProperties(properties));
@@ -2424,17 +2417,6 @@ public class FrontendRestRequestServiceTest {
         }
       }
     }
-  }
-
-  private void setupGeneratedIdConfig(String value) throws InstantiationException {
-    if (value == null) {
-      configProps.remove(FrontendConfig.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED);
-    } else {
-      configProps.setProperty(FrontendConfig.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, value);
-    }
-    frontendConfig = new FrontendConfig(new VerifiableProperties(configProps));
-    frontendRestRequestService = getFrontendRestRequestService();
-    frontendRestRequestService.start();
   }
 
   /**

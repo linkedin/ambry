@@ -27,26 +27,6 @@ import org.junit.Test;
 public class FrontendConfigTest {
 
   @Test
-  public void testGeneratedBlobIdServerErrorEnabled() {
-    Assert.assertEquals("frontend.generated.blob.id.server.error.enabled",
-        FrontendConfig.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED);
-    Properties properties = new Properties();
-    Assert.assertFalse(new FrontendConfig(new VerifiableProperties(properties)).generatedBlobIdServerErrorEnabled);
-    for (boolean enabled : new boolean[]{false, true}) {
-      properties.setProperty(FrontendConfig.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, Boolean.toString(enabled));
-      Assert.assertEquals(enabled,
-          new FrontendConfig(new VerifiableProperties(properties)).generatedBlobIdServerErrorEnabled);
-    }
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void testGeneratedBlobIdServerErrorEnabledRejectsInvalidValue() {
-    Properties properties = new Properties();
-    properties.setProperty(FrontendConfig.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, "enabled");
-    new FrontendConfig(new VerifiableProperties(properties));
-  }
-
-  @Test
   public void testNamedBlobCleanupContainerDelaySeconds() {
     Properties properties = new Properties();
     FrontendConfig config = new FrontendConfig(new VerifiableProperties(properties));

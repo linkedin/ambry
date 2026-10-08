@@ -561,7 +561,7 @@ class FrontendRestRequestService implements RestRequestService, RestRequestMetri
   /**
    * Submits the response and {@code responseBody} (and any {@code exception})for the {@code restRequest} to the
    * {@code responseHandler}.
-   * Invalid generated upload IDs are always counted; frontend configuration controls server-error classification.
+   * Counts invalid IDs encountered while consuming server-generated upload results.
    * @param restRequest the {@link RestRequest} for which a response is ready.
    * @param restResponseChannel the {@link RestResponseChannel} over which the response can be sent.
    * @param responseBody the body of the response in the form of a {@link ReadableStreamChannel}.
@@ -577,15 +577,11 @@ class FrontendRestRequestService implements RestRequestService, RestRequestMetri
       }
       if (exception instanceof RouterException) {
         RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
-        RestServiceErrorCode errorCode = RestServiceErrorCode.getRestServiceErrorCode(routerErrorCode);
         if (routerErrorCode == RouterErrorCode.InvalidBlobId
             && Boolean.TRUE.equals(restRequest.getArgs().get(BLOB_ID_IS_SERVER_GENERATED))) {
           frontendMetrics.generatedBlobIdError.inc();
-          if (frontendConfig.generatedBlobIdServerErrorEnabled) {
-            errorCode = RestServiceErrorCode.InternalServerError;
-          }
         }
-        exception = new RestServiceException(exception, errorCode);
+        exception = new RestServiceException(exception, RestServiceErrorCode.getRestServiceErrorCode(routerErrorCode));
       }
       responseHandler.handleResponse(restRequest, restResponseChannel, responseBody, exception);
     } catch (Exception e) {
