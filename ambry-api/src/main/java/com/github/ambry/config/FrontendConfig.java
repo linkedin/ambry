@@ -41,6 +41,7 @@ public class FrontendConfig {
       PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
   public static final String MAX_JSON_REQUEST_SIZE_BYTES_KEY = PREFIX + "max.json.request.size.bytes";
   public static final String ENABLE_UNDELETE = PREFIX + "enable.undelete";
+  public static final String GENERATED_BLOB_ID_SERVER_ERROR_ENABLED = PREFIX + "generated.blob.id.server.error.enabled";
   public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
   public static final String CONTAINER_METRICS_EXCLUDED_ACCOUNTS = PREFIX + "container.metrics.excluded.accounts";
   public static final String CONTAINER_METRICS_AGGREGATED_ACCOUNTS = PREFIX + "container.metrics.aggregated.accounts";
@@ -313,6 +314,14 @@ public class FrontendConfig {
   public final boolean enableUndelete;
 
   /**
+   * {@code frontend.generated.blob.id.server.error.enabled} enables HTTP 500 for invalid generated upload IDs.
+   * Defaults to {@code false} (HTTP 400); generated-ID errors are counted regardless of this setting.
+   */
+  @Config(GENERATED_BLOB_ID_SERVER_ERROR_ENABLED)
+  @Default("false")
+  public final boolean generatedBlobIdServerErrorEnabled;
+
+  /**
    * The {@link AccountStatsStoreFactory}.
    */
   @Config(ACCOUNT_STATS_STORE_FACTORY)
@@ -447,6 +456,7 @@ public class FrontendConfig {
     maxJsonRequestSizeBytes =
         verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Integer.MAX_VALUE);
     enableUndelete = verifiableProperties.getBoolean(ENABLE_UNDELETE, false);
+    generatedBlobIdServerErrorEnabled = verifiableProperties.getBoolean(GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, false);
     accountStatsStoreFactory =
         verifiableProperties.getString(ACCOUNT_STATS_STORE_FACTORY, DEFAULT_ACCOUNT_STATS_STORE_FACTORY);
     namedBlobDbFactory = verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);

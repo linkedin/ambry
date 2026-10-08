@@ -520,11 +520,6 @@ public class RestUtils {
     public static final String BLOB_ID_IS_SERVER_GENERATED = KEY_PREFIX + "blob-id-is-server-generated";
 
     /**
-     * Trusted Boolean gate for HTTP 500 on invalid generated upload IDs. Absent or false preserves HTTP 400.
-     */
-    public static final String GENERATED_BLOB_ID_SERVER_ERROR_ENABLED = KEY_PREFIX + "generatedBlobIdServerErrorEnabled";
-
-    /**
      * The internal header to determine if the delete request is coming from a dataset deletion.
      */
     public static final String DATASET_DELETE_ENABLED = KEY_PREFIX + "dataset-delete-enabled";

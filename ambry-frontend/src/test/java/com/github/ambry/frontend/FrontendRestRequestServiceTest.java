@@ -2247,30 +2247,27 @@ public class FrontendRestRequestServiceTest {
 
   @Test
   public void testGeneratedIdResponseMapping() throws Exception {
-    assertEquals("ambry-internal-key-generatedBlobIdServerErrorEnabled",
-        InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED);
     assertSame(frontendMetrics.generatedBlobIdError,
         metricRegistry.getCounters().get(MetricRegistry.name(FrontendRestRequestService.class, "GeneratedBlobIdError")));
-    for (Object context : new Object[]{null, false, true, "true"}) {
-      for (Object gate : new Object[]{null, false, true, "true"}) {
+    for (String configuredValue : new String[]{null, "false", "true"}) {
+      setupGeneratedIdConfig(configuredValue);
+      for (Object context : new Object[]{null, false, true, "true"}) {
         for (RouterErrorCode code : RouterErrorCode.values()) {
           try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
             if (context != null) {
               request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, context);
-            }
-            if (gate != null) {
-              request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, gate);
             }
             RouterException error = new RouterException("router failure", code);
             MockRestResponseChannel response = spy(new MockRestResponseChannel());
             long countBefore = frontendMetrics.generatedBlobIdError.getCount();
             frontendRestRequestService.submitResponse(request, response, null, error);
             boolean generatedIdError = Boolean.TRUE.equals(context) && code == RouterErrorCode.InvalidBlobId;
-            RestServiceErrorCode expected = generatedIdError && Boolean.TRUE.equals(gate)
+            RestServiceErrorCode expected = generatedIdError && Boolean.parseBoolean(configuredValue)
                 ? RestServiceErrorCode.InternalServerError : RestServiceErrorCode.getRestServiceErrorCode(code);
             assertEquals(ResponseStatus.getResponseStatus(expected), response.getStatus());
             assertSame(error, response.getException().getCause());
             assertEquals(countBefore + (generatedIdError ? 1 : 0), frontendMetrics.generatedBlobIdError.getCount());
+            assertEquals(0, frontendMetrics.responseSubmissionError.getCount());
             verify(response).onResponseComplete(any());
           }
         }
@@ -2280,11 +2277,11 @@ public class FrontendRestRequestServiceTest {
 
   @Test
   public void testGeneratedIdCounterIgnoresNonRouterFailures() throws Exception {
+    setupGeneratedIdConfig("true");
     for (Exception error : new Exception[]{null, new RestServiceException("invalid input", RestServiceErrorCode.BadRequest),
         new RuntimeException("failure")}) {
       try (RestRequest request = createRestRequest(RestMethod.POST, "/", null, null)) {
         request.setArg(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, true);
-        request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, true);
         MockRestResponseChannel response = new MockRestResponseChannel();
         long countBefore = frontendMetrics.generatedBlobIdError.getCount();
         frontendRestRequestService.submitResponse(request, response, null, error);
@@ -2305,8 +2302,8 @@ public class FrontendRestRequestServiceTest {
     idConverterFactory = converterFactory;
     router = spy(router);
     doReturn(converterFactory.getIdConverter()).when(router).getIdConverter();
-    frontendRestRequestService = spy(getFrontendRestRequestService());
-    frontendRestRequestService.start();
+    setupGeneratedIdConfig("true");
+    frontendRestRequestService = spy(frontendRestRequestService);
     String namedPath = "/named/" + refAccount.getName() + "/" + refContainer.getName() + "/blob";
     String s3Path = namedPath.replace("/named/", "/s3/");
     String chunkId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
@@ -2373,7 +2370,6 @@ public class FrontendRestRequestServiceTest {
           clearInvocations(router);
           try (RestRequest request = createRestRequest(method, uri, headers,
               new LinkedList<>(Arrays.asList(ByteBuffer.wrap(body), null)))) {
-            request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, true);
             long countBefore = frontendMetrics.generatedBlobIdError.getCount();
             RestServiceErrorCode expected;
             if (failure instanceof RouterException
@@ -2410,6 +2406,7 @@ public class FrontendRestRequestServiceTest {
 
   @Test
   public void testClientBlobIdErrorsRemainBadRequest() throws Exception {
+    setupGeneratedIdConfig("true");
     Properties properties = new Properties();
     properties.setProperty(InMemoryRouter.OPERATION_THROW_ROUTER_EXCEPTION, RouterErrorCode.InvalidBlobId.name());
     router.setVerifiableProperties(new VerifiableProperties(properties));
@@ -2420,7 +2417,6 @@ public class FrontendRestRequestServiceTest {
         headers.put(InternalKeys.BLOB_ID_IS_SERVER_GENERATED, "true");
         try (RestRequest request = createRestRequest(put ? RestMethod.PUT : RestMethod.valueOf(operation),
             put ? "/" + operation : "/" + blobId, headers, null)) {
-          request.setArg(InternalKeys.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, true);
           long countBefore = frontendMetrics.generatedBlobIdError.getCount();
           assertEquals(ResponseStatus.BadRequest,
               verifyOperationFailure(request, RestServiceErrorCode.BadRequest).getStatus());
@@ -2428,6 +2424,17 @@ public class FrontendRestRequestServiceTest {
         }
       }
     }
+  }
+
+  private void setupGeneratedIdConfig(String value) throws InstantiationException {
+    if (value == null) {
+      configProps.remove(FrontendConfig.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED);
+    } else {
+      configProps.setProperty(FrontendConfig.GENERATED_BLOB_ID_SERVER_ERROR_ENABLED, value);
+    }
+    frontendConfig = new FrontendConfig(new VerifiableProperties(configProps));
+    frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService.start();
   }
 
   /**
