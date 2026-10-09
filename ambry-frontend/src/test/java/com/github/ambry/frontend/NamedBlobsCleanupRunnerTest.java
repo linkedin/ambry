@@ -15,6 +15,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.codahale.metrics.MetricRegistry;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,6 +32,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
@@ -40,7 +42,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import org.junit.Test;
 
 
@@ -353,6 +358,238 @@ public class NamedBlobsCleanupRunnerTest {
         CompletableFuture.completedFuture(
             new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.emptyList(), null)));
     return namedBlobDb;
+  }
+
+  @Test
+  public void testPurgePagesRevisitSameNameAndDeleteLatest() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+    StaleNamedBlob first = purgeBlob(1);
+    StaleNamedBlob latest = purgeBlob(2);
+    when(db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true)).thenReturn(purgePage(first, "same-name"));
+    when(db.pullStaleBlobs(container, "same-name", 0, true)).thenReturn(purgePage(latest, null));
+    when(router.deleteBlob(any(String.class), any(String.class))).thenReturn(
+        CompletableFuture.completedFuture(null));
+    when(db.cleanupStaleData(any())).thenReturn(CompletableFuture.completedFuture(1));
+    MetricRegistry metrics = new MetricRegistry();
+
+    purgeRunner(container, db, router, c -> true, false, metrics).run();
+
+    verify(router).deleteBlob(first.getBlobId(), "ambry-named-blobs-cleanup-runner");
+    verify(router).deleteBlob(latest.getBlobId(), "ambry-named-blobs-cleanup-runner");
+    verify(db).cleanupStaleData(Collections.singletonList(first));
+    verify(db).cleanupStaleData(Collections.singletonList(latest));
+    assertEquals(2, metrics.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "PurgedBlobCount")).getCount());
+  }
+
+  @Test
+  public void testPurgeDryRunDoesNotDeleteOrAdvance() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+    when(db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true)).thenReturn(purgePage(purgeBlob(1), "same-name"));
+    MetricRegistry metrics = new MetricRegistry();
+
+    purgeRunner(container, db, router, c -> true, true, metrics).run();
+
+    verify(router, never()).deleteBlob(any(String.class), any(String.class));
+    verify(db, never()).cleanupStaleData(any());
+    verify(db, never()).pullStaleBlobs(container, "same-name", 0, true);
+    assertEquals(1,
+        metrics.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "PurgePreviewBlobCount")).getCount());
+  }
+
+  @Test
+  public void testIneligibleContainerUsesNormalCleanup() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+
+    purgeRunner(container, db, mock(Router.class), c -> false, false, new MetricRegistry()).run();
+
+    verify(db).pullStaleBlobs(container, FIRST_BLOB_NAME);
+    verify(db, never()).pullStaleBlobs(any(Container.class), any(String.class), anyInt(), eq(true));
+  }
+
+  @Test
+  public void testPurgeHonorsExclusionsAndDisabledMode() {
+    Container excluded = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL, (short) 100, "excluded");
+    Container disabled = mockContainer((short) 2, Container.NamedBlobMode.DISABLED, (short) 100, "disabled");
+    Account account = mock(Account.class);
+    when(account.getName()).thenReturn("account");
+    AccountService accounts = mock(AccountService.class);
+    when(accounts.getAccountById((short) 100)).thenReturn(account);
+    when(accounts.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(
+        new HashSet<>(Arrays.asList(excluded, disabled)));
+    when(accounts.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+
+    new NamedBlobsCleanupRunner(router, db, accounts, 0, Collections.singleton("account/excluded"),
+        Collections.emptySet(), c -> true, false, new MetricRegistry()).run();
+    new NamedBlobsCleanupRunner(router, db, accounts, 0, Collections.emptySet(), Collections.singleton("account"),
+        c -> true, false, new MetricRegistry()).run();
+
+    verify(db, never()).pullStaleBlobs(any(Container.class), any(String.class), anyInt(), eq(true));
+    verify(router, never()).deleteBlob(any(String.class), any(String.class));
+    verify(db, never()).cleanupStaleData(any());
+  }
+
+  @Test
+  public void testPurgeEligibilityRevokedBeforeDelete() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+    AtomicBoolean eligible = new AtomicBoolean(true);
+    when(db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true)).thenAnswer(invocation -> {
+      eligible.set(false);
+      return purgePage(purgeBlob(1), null);
+    });
+    MetricRegistry metrics = new MetricRegistry();
+
+    purgeRunner(container, db, router, c -> eligible.get(), false, metrics).run();
+
+    verify(router, never()).deleteBlob(any(String.class), any(String.class));
+    verify(db, never()).cleanupStaleData(any());
+    assertEquals(1, metrics.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerFailedCount")).getCount());
+  }
+
+  @Test
+  public void testPurgeDeleteFailureStopsAtCurrentPage() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+    StaleNamedBlob blob = purgeBlob(1);
+    when(db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true)).thenReturn(purgePage(blob, "same-name"));
+    CompletableFuture<Void> failedDelete = new CompletableFuture<>();
+    failedDelete.completeExceptionally(new IllegalStateException("delete failed"));
+    when(router.deleteBlob(any(String.class), any(String.class))).thenReturn(failedDelete);
+    when(db.cleanupStaleData(any())).thenReturn(CompletableFuture.completedFuture(0));
+    NamedBlobsCleanupRunner runner = purgeRunner(container, db, router, c -> true, false, new MetricRegistry());
+
+    runner.run();
+    runner.run();
+
+    verify(db, times(2)).pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true);
+    verify(db, never()).pullStaleBlobs(container, "same-name", 0, true);
+    verify(db, times(2)).cleanupStaleData(Collections.emptyList());
+  }
+
+  @Test
+  public void testPurgeMetadataFailureStopsAtCurrentPage() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+    when(db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true)).thenReturn(purgePage(purgeBlob(1), "same-name"));
+    when(router.deleteBlob(any(String.class), any(String.class))).thenReturn(CompletableFuture.completedFuture(null));
+    CompletableFuture<Integer> failedCleanup = new CompletableFuture<>();
+    failedCleanup.completeExceptionally(new IllegalStateException("metadata failed"));
+    when(db.cleanupStaleData(any())).thenReturn(failedCleanup);
+
+    purgeRunner(container, db, router, c -> true, false, new MetricRegistry()).run();
+
+    verify(db, never()).pullStaleBlobs(container, "same-name", 0, true);
+  }
+
+  @Test
+  public void testPurgeStopsWhenMetadataCleanupDoesNotRemovePage() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+    StaleNamedBlob blob = purgeBlob(1);
+    when(db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true)).thenReturn(purgePage(blob, "same-name"));
+    when(db.pullStaleBlobs(container, "same-name", 0, true)).thenReturn(purgePage(blob, "same-name"));
+    when(router.deleteBlob(any(String.class), any(String.class))).thenReturn(CompletableFuture.completedFuture(null));
+    when(db.cleanupStaleData(any())).thenReturn(CompletableFuture.completedFuture(1));
+    MetricRegistry metrics = new MetricRegistry();
+
+    purgeRunner(container, db, router, c -> true, false, metrics).run();
+
+    verify(router, times(1)).deleteBlob(blob.getBlobId(), "ambry-named-blobs-cleanup-runner");
+    verify(db, times(1)).cleanupStaleData(any());
+    assertEquals(1, metrics.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerFailedCount")).getCount());
+  }
+
+  @Test
+  public void testPurgeWaitsForMetadataBeforeNextPage() throws Exception {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    Router router = mock(Router.class);
+    when(db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true)).thenReturn(purgePage(purgeBlob(1), "same-name"));
+    when(db.pullStaleBlobs(container, "same-name", 0, true)).thenReturn(
+        CompletableFuture.completedFuture(new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.emptyList(), null)));
+    when(router.deleteBlob(any(String.class), any(String.class))).thenReturn(CompletableFuture.completedFuture(null));
+    CompletableFuture<Integer> cleanup = new CompletableFuture<>();
+    CountDownLatch cleanupStarted = new CountDownLatch(1);
+    when(db.cleanupStaleData(any())).thenAnswer(invocation -> {
+      cleanupStarted.countDown();
+      return cleanup;
+    });
+    Thread thread = new Thread(purgeRunner(container, db, router, c -> true, false, new MetricRegistry()));
+    try {
+      thread.start();
+      assertTrue(cleanupStarted.await(5, TimeUnit.SECONDS));
+      verify(db, never()).pullStaleBlobs(container, "same-name", 0, true);
+      cleanup.complete(1);
+      thread.join(5000);
+      assertTrue("Cleanup should finish", !thread.isAlive());
+      verify(db).pullStaleBlobs(container, "same-name", 0, true);
+    } finally {
+      cleanup.complete(1);
+      thread.interrupt();
+      thread.join(5000);
+    }
+  }
+
+  @Test
+  public void testPurgeKilledScanNeverSkipsName() {
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    NamedBlobDb db = mockNamedBlobDb();
+    CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> killed = new CompletableFuture<>();
+    killed.completeExceptionally(new SQLException("query killed", "70100"));
+    when(db.pullStaleBlobs(eq(container), eq(FIRST_BLOB_NAME), anyInt(), eq(true))).thenReturn(killed);
+
+    purgeRunner(container, db, mock(Router.class), c -> true, false, new MetricRegistry()).run();
+
+    verify(db).pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true);
+    verify(db).pullStaleBlobs(container, FIRST_BLOB_NAME, 50, true);
+    verify(db, never()).getFirstBlobName(any(Container.class), any(String.class));
+    verify(db, never()).cleanupStaleData(any());
+  }
+
+  @Test
+  public void testPurgeDefaultMethodFailsExplicitly() throws Exception {
+    NamedBlobDb db = mock(NamedBlobDb.class, org.mockito.Mockito.CALLS_REAL_METHODS);
+    Container container = mockContainer((short) 1, Container.NamedBlobMode.OPTIONAL);
+    try {
+      db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, true).get();
+      org.junit.Assert.fail("Unsupported purge must fail");
+    } catch (java.util.concurrent.ExecutionException e) {
+      assertTrue(e.getCause() instanceof UnsupportedOperationException);
+    }
+    db.pullStaleBlobs(container, FIRST_BLOB_NAME, 0, false);
+    verify(db).pullStaleBlobs(container, FIRST_BLOB_NAME);
+    db.pullStaleBlobs(container, FIRST_BLOB_NAME, 10, false);
+    verify(db).pullStaleBlobs(container, FIRST_BLOB_NAME, 10);
+  }
+
+  private NamedBlobsCleanupRunner purgeRunner(Container container, NamedBlobDb db, Router router,
+      Predicate<Container> eligibility, boolean dryRun, MetricRegistry metrics) {
+    AccountService accounts = mock(AccountService.class);
+    when(accounts.getContainersByStatus(Container.ContainerStatus.ACTIVE)).thenReturn(Collections.singleton(container));
+    when(accounts.getContainersByStatus(Container.ContainerStatus.INACTIVE)).thenReturn(Collections.emptySet());
+    return new NamedBlobsCleanupRunner(router, db, accounts, 0, Collections.emptySet(), Collections.emptySet(),
+        new MockTime(), metrics, eligibility, dryRun);
+  }
+
+  private CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> purgePage(StaleNamedBlob blob, String nextName) {
+    return CompletableFuture.completedFuture(
+        new NamedBlobDb.StaleBlobsWithLatestBlobName(Collections.singletonList(blob), nextName));
+  }
+
+  private StaleNamedBlob purgeBlob(long version) {
+    return new StaleNamedBlob((short) 0, (short) 1, "same-name", "blob-id-" + version, version,
+        new java.sql.Timestamp(0), com.github.ambry.protocol.NamedBlobState.READY, new java.sql.Timestamp(0));
   }
 
   private Container mockContainer(short id, Container.NamedBlobMode namedBlobMode) {

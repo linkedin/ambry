@@ -25,6 +25,8 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -63,6 +65,75 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   public MySqlNamedBlobDbIntegrationTest(boolean enableHardDelete) throws Exception {
     super(enableHardDelete, MySqlNamedBlobDbConfig.DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
+  }
+
+  @Test
+  public void testPurgeAllVersionsAcrossPages() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    Set<Long> expectedVersions = new HashSet<>();
+    for (int i = 0; i < 5; i++) {
+      NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), "same-name", blobId,
+          Utils.Infinite_Time);
+      expectedVersions.add(namedBlobDb.put(record, NamedBlobState.READY, true).get().getInsertedRecord().getVersion());
+      time.sleep(1);
+    }
+    assertEquals("Normal cleanup must retain the latest version", 4,
+        namedBlobDb.pullStaleBlobs(container, "\0", 10).get().getStaleBlobs().size());
+    Set<Long> purgedVersions = new HashSet<>();
+    String cursor = "\0";
+    int pages = 0;
+    do {
+      NamedBlobDb.StaleBlobsWithLatestBlobName page = namedBlobDb.pullStaleBlobs(container, cursor, 2, true).get();
+      for (StaleNamedBlob blob : page.getStaleBlobs()) {
+        purgedVersions.add(blob.getVersion());
+      }
+      namedBlobDb.cleanupStaleData(page.getStaleBlobs()).get();
+      cursor = page.getLatestBlob();
+      assertTrue("Purge must converge even when one name spans multiple pages", ++pages <= 10);
+    } while (cursor != null);
+    assertEquals(expectedVersions, purgedVersions);
+    assertTrue(namedBlobDb.pullStaleBlobs(container, "\0", 2, true).get().getStaleBlobs().isEmpty());
+    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), "same-name"),
+        RestServiceErrorCode.Deleted);
+  }
+
+  @Test
+  public void testPurgeQueryUsesPrimaryKeyOrderWithoutFilesort() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    for (DataSource dataSource : namedBlobDb.getDataSources().values()) {
+      try (Connection connection = dataSource.getConnection()) {
+        try (PreparedStatement insert = connection.prepareStatement(
+            "INSERT INTO named_blobs_v2 (account_id, container_id, blob_name, version, blob_id, blob_state) "
+                + "VALUES (?, ?, ?, ?, ?, ?)")) {
+          for (int i = 0; i < 2048; i++) {
+            insert.setInt(1, account.getId());
+            insert.setInt(2, container.getId());
+            insert.setString(3, String.format("name-%04d", i));
+            insert.setLong(4, 1);
+            insert.setBytes(5, Utils.base64DecodeUrlSafe(getBlobId(account, container)));
+            insert.setInt(6, NamedBlobState.READY.ordinal());
+            insert.addBatch();
+          }
+          insert.executeBatch();
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+            "EXPLAIN " + MySqlNamedBlobDb.GET_BLOBS_FOR_CONTAINER_PURGE)) {
+          statement.setInt(1, container.getId());
+          statement.setInt(2, account.getId());
+          statement.setString(3, "name-1024");
+          statement.setInt(4, 2);
+          try (ResultSet explain = statement.executeQuery()) {
+            assertTrue(explain.next());
+            assertEquals("PRIMARY", explain.getString("key"));
+            String extra = explain.getString("Extra");
+            assertFalse("Purge must not filesort: " + extra, extra != null && extra.contains("Using filesort"));
+          }
+        }
+      }
+    }
   }
 
   @Test
