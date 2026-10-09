@@ -120,6 +120,27 @@ public interface NamedBlobDb extends Closeable {
   CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName, int maxResults);
 
   /**
+   * Pull a cleanup page, optionally treating every unexpired, non-deleted version (including the latest) as stale.
+   * Purge callers must prevent reads and writes to the source container and verify that its data is no longer needed.
+   * In purge mode the next blob name is inclusive: callers must finish deleting and soft-deleting a page before
+   * fetching the next one, and stop on failure, since a single name can span multiple pages.
+   * @param container the container to clean.
+   * @param blobName inclusive starting blob name.
+   * @param maxResults maximum rows to scan, or {@code 0} for the database default.
+   * @param purgeAllVersions whether to bypass latest-version and retention protections.
+   * @return a cleanup page; implementations without purge support fail explicitly when purge is requested.
+   */
+  default CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName,
+      int maxResults, boolean purgeAllVersions) {
+    if (purgeAllVersions) {
+      CompletableFuture<StaleBlobsWithLatestBlobName> future = new CompletableFuture<>();
+      future.completeExceptionally(new UnsupportedOperationException("Named blob purge is not supported"));
+      return future;
+    }
+    return maxResults == 0 ? pullStaleBlobs(container, blobName) : pullStaleBlobs(container, blobName, maxResults);
+  }
+
+  /**
    * Returns the first (lowest) blob name in the container at or after {@code blobNameFrom}, or {@code null} if the
    * container has no such blob. A cheap index-only point lookup used by the cleanup runner to advance its cursor past a
    * blob name whose stale-version scan repeatedly crosses the database long-transaction limit, so the rest of the

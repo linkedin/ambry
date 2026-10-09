@@ -161,16 +161,19 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String TTL_UPDATE_QUERY =
       String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
 
-  private static final String GET_BLOBS_FOR_CONTAINER = String.format(
+  private static final String GET_BLOBS_FOR_CONTAINER_TEMPLATE = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " + "FROM %s "
-          + "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND ( deleted_ts IS NULL or deleted_ts > UTC_TIMESTAMP()) "
-          + "ORDER BY %s ASC, %s DESC " + "LIMIT ?", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, VERSION, BLOB_STATE,
+          + "WHERE container_id = ? AND account_id = ? AND blob_name >= ? AND ( deleted_ts IS NULL or deleted_ts > %%s) "
+          + "ORDER BY %s ASC, %s %%s " + "LIMIT ?", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, VERSION, BLOB_STATE,
       MODIFIED_TS, DELETED_TS, NAMED_BLOBS_V2, BLOB_NAME, VERSION);
+  private static final String GET_BLOBS_FOR_CONTAINER =
+      String.format(GET_BLOBS_FOR_CONTAINER_TEMPLATE, "UTC_TIMESTAMP()", "DESC");
+  static final String GET_BLOBS_FOR_CONTAINER_PURGE =
+      String.format(GET_BLOBS_FOR_CONTAINER_TEMPLATE, "UTC_TIMESTAMP(6)", "ASC");
 
   private static final String GET_FIRST_BLOB_NAME = String.format(
       "SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s >= ? ORDER BY %s ASC, %s ASC LIMIT 1", BLOB_NAME,
       NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_NAME, VERSION);
-
   private final AccountService accountService;
   private final String localDatacenter;
   private final List<String> remoteDatacenters;
@@ -508,20 +511,30 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName,
       int maxResults) {
+    return pullStaleBlobs(container, blobName, maxResults, false);
+  }
+
+  @Override
+  public CompletableFuture<StaleBlobsWithLatestBlobName> pullStaleBlobs(Container container, String blobName,
+      int maxResults, boolean purgeAllVersions) {
+    if (maxResults < 0) {
+      throw new IllegalArgumentException("maxResults must not be negative");
+    }
+    int pageSize = maxResults == 0 ? config.queryStaleDataMaxResults : maxResults;
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
       StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName = null;
       List<StaleNamedBlob> potentialStaleNamedBlobResults =
-          getAllBlobsForContainer(connection, container, blobName, maxResults);
+          getAllBlobsForContainer(connection, container, blobName, pageSize, purgeAllVersions);
       int resultSize = potentialStaleNamedBlobResults.size();
       if (resultSize == 0) {
         return new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults, null);
       }
 
       Container.ContainerStatus status = container.getStatus();
-      if (status == Container.ContainerStatus.ACTIVE) {
+      if (!purgeAllVersions && status == Container.ContainerStatus.ACTIVE) {
         staleBlobsWithLatestBlobName =
             getStaleBlobsForActiveContainer(potentialStaleNamedBlobResults, config.staleDataRetentionDays,
                 config.staleDataRetentionVersions, config.staleReadyDataRetentionDays);
@@ -529,7 +542,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         staleBlobsWithLatestBlobName = new StaleBlobsWithLatestBlobName(potentialStaleNamedBlobResults,
             potentialStaleNamedBlobResults.get(potentialStaleNamedBlobResults.size() - 1).getBlobName());
       }
-      if (resultSize < maxResults) {
+      if (resultSize < pageSize) {
         staleBlobsWithLatestBlobName  = new StaleBlobsWithLatestBlobName(staleBlobsWithLatestBlobName.getStaleBlobs(), null);
       }
 
@@ -1319,10 +1332,11 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * @throws SQLException If a database access error occurs or the query fails.
    */
   private List<StaleNamedBlob> getAllBlobsForContainer(Connection connection, Container container,
-      String latestBlobName, int maxResults) throws SQLException {
+      String latestBlobName, int maxResults, boolean purgeAllVersions) throws SQLException {
     List<StaleNamedBlob> resultList = new ArrayList<>();
 
-    try (PreparedStatement statement = connection.prepareStatement(GET_BLOBS_FOR_CONTAINER)) {
+    try (PreparedStatement statement = connection.prepareStatement(
+        purgeAllVersions ? GET_BLOBS_FOR_CONTAINER_PURGE : GET_BLOBS_FOR_CONTAINER)) {
       statement.setInt(1, container.getId());
       statement.setInt(2, container.getParentAccountId());
       statement.setString(3, latestBlobName);
