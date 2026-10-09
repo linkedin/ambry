@@ -516,12 +516,64 @@ public class NettyMessageProcessorTest {
    * size sample even though the interim response channel has already completed.
    */
   @Test
+  public void testResponseTtfbIgnoresDelayedContinue() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Continue", registry);
+    RestRequestMetricsTracker.setDefaults(registry);
+    Properties properties = new Properties();
+    properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
+    RestRequestHandler handler = new RestRequestHandler() {
+      private boolean interimSent;
+
+      @Override
+      public void start() {
+      }
+
+      @Override
+      public void shutdown() {
+      }
+
+      @Override
+      public void handleRequest(RestRequest request, RestResponseChannel response) throws RestServiceException {
+        request.getMetricsTracker().injectMetrics(metrics);
+        response.setStatus(interimSent ? ResponseStatus.Created : ResponseStatus.Continue);
+        interimSent = true;
+        response.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        response.onResponseComplete(null);
+      }
+    };
+    DelayedContinueWriteHandler delay = new DelayedContinueWriteHandler();
+    EmbeddedChannel channel = new EmbeddedChannel(delay, new ChunkedWriteHandler(),
+        new NettyMessageProcessor(new NettyMetrics(registry),
+            new NettyConfig(new VerifiableProperties(properties)), PERFORMANCE_CONFIG, handler));
+    try {
+      HttpHeaders headers = new DefaultHttpHeaders().set(EXPECT, CONTINUE).set(RestUtils.Headers.CONTENT_LENGTH, 1);
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.PUT, "/s3/account/container/blob", headers));
+      assertEquals(0, metrics.operationCount.getCount());
+      assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(new byte[]{1})));
+      channel.runPendingTasks();
+      assertEquals(1, metrics.operationCount.getCount());
+      assertEquals(1, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      assertEquals(1, metrics.successfulResponseTtfbSampleRate.getCount());
+      delay.completeContinueWrite();
+      channel.runPendingTasks();
+      assertEquals(1, metrics.successfulResponseTtfbSampleRate.getCount());
+      assertEquals(0, metrics.responseDeliveryFailureCount.getCount());
+      assertEquals(0, metrics.responseTtfbMissingCount.getCount());
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
   public void testContinueResponseWriteFailureRecordsClientAbortOnce() {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     NettyMetrics nettyMetrics = new NettyMetrics(metricRegistry);
     ContainerMetrics containerMetrics =
         new ContainerMetrics("account", "container", "PostBlob", metricRegistry, false, null);
+    RestRequestMetrics requestMetrics = new RestRequestMetrics(getClass(), "FailedContinue", metricRegistry);
     Properties properties = new Properties();
     properties.put(NettyConfig.NETTY_ENABLE_ONE_HUNDRED_CONTINUE, "true");
     NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(properties));
@@ -539,6 +591,7 @@ public class NettyMessageProcessorTest {
       public void handleRequest(RestRequest restRequest, RestResponseChannel restResponseChannel)
           throws RestServiceException {
         restRequest.getMetricsTracker().injectContainerMetrics(containerMetrics);
+        restRequest.getMetricsTracker().injectMetrics(requestMetrics);
         restResponseChannel.setStatus(ResponseStatus.Continue);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
         restResponseChannel.onResponseComplete(null);
@@ -568,6 +621,9 @@ public class NettyMessageProcessorTest {
       channel.writeInbound(httpRequest);
       channel.runPendingTasks();
 
+      assertEquals(0, requestMetrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      assertEquals(0, requestMetrics.successfulResponseTtfbSampleRate.getCount());
+      assertEquals(1, requestMetrics.responseDeliveryFailureCount.getCount());
       assertEquals("The failed continue write should record one client abort", 1,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
       assertEquals("The continue response should not enter the server-error abort subset", 0,

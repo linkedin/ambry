@@ -83,9 +83,12 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -613,6 +616,282 @@ public class NettyResponseChannelTest {
       }
     }
     channel.close();
+  }
+
+  @Test
+  public void testResponseTtfbSeparatesCompletedStatusClasses() throws Exception {
+    ResponseStatus[] statuses = {ResponseStatus.Ok, ResponseStatus.Created, ResponseStatus.Accepted,
+        ResponseStatus.NoContent, ResponseStatus.PartialContent, ResponseStatus.NotModified, ResponseStatus.BadRequest,
+        ResponseStatus.Unauthorized, ResponseStatus.Forbidden, ResponseStatus.NotFound, ResponseStatus.TooManyRequests,
+        ResponseStatus.InternalServerError, ResponseStatus.ServiceUnavailable, ResponseStatus.InsufficientCapacity};
+    String[] populations = {"Successful", "Successful", "Successful", "Successful", "Successful", "Successful",
+        "ClientError", "ClientError", "ClientError", "ClientError", "ClientError", "ServerError", "ServerError",
+        "ServerError"};
+    for (int i = 0; i < statuses.length; i++) {
+      for (HttpMethod method : new HttpMethod[]{HttpMethod.GET, HttpMethod.HEAD}) {
+        EmbeddedChannel channel = createEmbeddedChannel();
+        try {
+          channel.writeInbound(RestTestUtils.createRequest(method, "/", null));
+          MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+          MetricRegistry registry = new MetricRegistry();
+          RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Response", registry);
+          processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+          NettyResponseChannel responseChannel = processor.getRestResponseChannel();
+          responseChannel.setStatus(statuses[i]);
+          responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          responseChannel.onResponseComplete(null);
+          channel.runPendingTasks();
+          String prefix = getClass().getName() + ".Response";
+          for (String population : new String[]{"Successful", "ClientError", "ServerError"}) {
+            String histogramName = prefix + population + "ResponseNioTimeToFirstByteInMs";
+            assertNotNull("Missing response TTFB histogram " + histogramName, registry.getHistograms().get(histogramName));
+            long expected = population.equals(populations[i]) ? 1 : 0;
+            assertEquals(statuses[i] + " " + method, expected, registry.getHistograms().get(histogramName).getCount());
+            assertEquals(expected, registry.getMeters().get(prefix + population + "ResponseTtfbSampleRate").getCount());
+          }
+          assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
+          assertEquals(1, metrics.operationCount.getCount());
+          assertEquals(1, metrics.operationRate.getCount());
+          assertEquals(0, registry.getCounters().get(prefix + "ResponseDeliveryFailureCount").getCount());
+          assertEquals(0, registry.getCounters().get(prefix + "ResponseTtfbMissingCount").getCount());
+          assertEquals(statuses[i].isClientError() ? 1 : 0,
+              registry.getCounters().get(prefix + "ClientErrorCount").getCount());
+          assertEquals(statuses[i].isServerError() ? 1 : 0, metrics.serverErrorCount.getCount());
+          assertEquals(statuses[i] == ResponseStatus.NotFound ? 1 : 0, metrics.notFoundCount.getCount());
+          responseChannel.onResponseComplete(new IOException("late cleanup"));
+          processor.getRequest().getMetricsTracker().recordMetrics();
+          assertEquals(1, metrics.operationCount.getCount());
+          assertEquals(0, registry.getCounters().get(prefix + "ResponseDeliveryFailureCount").getCount());
+        } finally {
+          channel.finishAndReleaseAll();
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testResponseTtfbRecordsDeliveredErrors() throws Exception {
+    RestServiceErrorCode[] codes = {RestServiceErrorCode.NotFound, RestServiceErrorCode.TooManyRequests,
+        RestServiceErrorCode.InternalServerError, RestServiceErrorCode.ServiceUnavailable,
+        RestServiceErrorCode.HostLevelThrottled};
+    String[] populations = {"ClientError", "ClientError", "ServerError", "ServerError", "ServerError"};
+    for (int i = 0; i < codes.length; i++) {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      try {
+        channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+        MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+        MetricRegistry registry = new MetricRegistry();
+        RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "ErrorResponse", registry);
+        processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+        long throttledBefore = processor.getNettyMetrics().hostLevelThrottledCount.getCount();
+        long unavailableBefore = processor.getNettyMetrics().serviceUnavailableErrorCount.getCount();
+        processor.getRestResponseChannel().onResponseComplete(new RestServiceException("error", codes[i]));
+        channel.runPendingTasks();
+        String prefix = getClass().getName() + ".ErrorResponse" + populations[i];
+        assertEquals(codes[i].toString(), 1,
+            registry.getHistograms().get(prefix + "ResponseNioTimeToFirstByteInMs").getCount());
+        assertEquals(1, registry.getMeters().get(prefix + "ResponseTtfbSampleRate").getCount());
+        assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+        assertEquals(0, metrics.responseDeliveryFailureCount.getCount());
+        assertEquals(1, metrics.operationError.getCount());
+        assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
+        assertEquals(i < 2 ? 1 : 0, metrics.clientErrorCount.getCount());
+        assertEquals(i < 2 ? 0 : 1, metrics.serverErrorCount.getCount());
+        if (codes[i] == RestServiceErrorCode.HostLevelThrottled) {
+          assertEquals(throttledBefore + 1, processor.getNettyMetrics().hostLevelThrottledCount.getCount());
+          assertEquals(unavailableBefore, processor.getNettyMetrics().serviceUnavailableErrorCount.getCount());
+        }
+      } finally {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  @Test
+  public void testResponseTtfbExcludesHeaderWriteFailures() throws Exception {
+    for (boolean errorResponse : new boolean[]{false, true}) {
+      HttpResponseStatus status = errorResponse ? HttpResponseStatus.INTERNAL_SERVER_ERROR : HttpResponseStatus.OK;
+      EmbeddedChannel channel = new EmbeddedChannel(new FailingResponseWriteHandler(status),
+          new ChunkedWriteHandler(), new MockNettyMessageProcessor());
+      try {
+        channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+        MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+        RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "FailedHeaders", new MetricRegistry());
+        processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+        processor.getRestResponseChannel().setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        processor.getRestResponseChannel().onResponseComplete(errorResponse
+            ? new RestServiceException("server failure", RestServiceErrorCode.InternalServerError) : null);
+        channel.runPendingTasks();
+        assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+        assertEquals(0, metrics.clientErrorResponseNioTimeToFirstByteInMs.getCount());
+        assertEquals(0, metrics.serverErrorResponseNioTimeToFirstByteInMs.getCount());
+        assertEquals(1, metrics.responseDeliveryFailureCount.getCount());
+        assertEquals(1, metrics.operationCount.getCount());
+        if (errorResponse) {
+          assertEquals(1, metrics.serverErrorCount.getCount());
+        }
+      } finally {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  @Test
+  public void testResponseTtfbExcludesNonemptyWriteToEmptyResponse() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "InvalidEmpty", new MetricRegistry());
+      processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+      processor.getRestResponseChannel().setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+      Future<Long> write = processor.getRestResponseChannel().write(ByteBuffer.wrap(new byte[]{1}), null);
+      try {
+        write.get(1, TimeUnit.SECONDS);
+        fail("Nonempty content must still be rejected");
+      } catch (ExecutionException e) {
+        assertTrue(e.getCause() instanceof IllegalStateException);
+      }
+      assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
+      assertEquals(1, metrics.responseDeliveryFailureCount.getCount());
+      assertEquals(1, metrics.operationCount.getCount());
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testResponseTtfbExcludesErrorRacingWithMetadataCompletion() throws Exception {
+    AtomicReference<ChannelPromise> pendingWrite = new AtomicReference<>();
+    ChannelOutboundHandlerAdapter delayHandler = new ChannelOutboundHandlerAdapter() {
+      @Override
+      public void write(ChannelHandlerContext ctx, Object message, ChannelPromise promise) {
+        if (message instanceof HttpResponse) {
+          pendingWrite.set(promise);
+          ctx.write(message);
+        } else {
+          ctx.write(message, promise);
+        }
+      }
+    };
+    EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(),
+        new MockNettyMessageProcessor());
+    CountDownLatch loggingStarted = new CountDownLatch(1);
+    CountDownLatch releaseLogging = new CountDownLatch(1);
+    AtomicBoolean pauseOnce = new AtomicBoolean();
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "RacingError", new MetricRegistry());
+      processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+      NettyResponseChannel responseChannel = processor.getRestResponseChannel();
+      responseChannel.write(ByteBuffer.wrap(new byte[]{1, 2, 3}), null);
+      RestServiceException exception = new RestServiceException("application failed", RestServiceErrorCode.BadRequest) {
+        @Override
+        public RestServiceErrorCode getErrorCode() {
+          if (pauseOnce.compareAndSet(false, true)) {
+            loggingStarted.countDown();
+            try {
+              assertTrue("Failure path must be released", releaseLogging.await(5, TimeUnit.SECONDS));
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              throw new AssertionError(e);
+            }
+          }
+          return super.getErrorCode();
+        }
+      };
+      Future<?> failure = executor.submit(() -> responseChannel.onResponseComplete(exception));
+      assertTrue("Failure must enter logging", loggingStarted.await(5, TimeUnit.SECONDS));
+      pendingWrite.get().setSuccess();
+      channel.runPendingTasks();
+      releaseLogging.countDown();
+      failure.get(5, TimeUnit.SECONDS);
+      channel.runPendingTasks();
+      assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
+      assertEquals(1, metrics.responseDeliveryFailureCount.getCount());
+      assertEquals(1, metrics.operationCount.getCount());
+    } finally {
+      releaseLogging.countDown();
+      executor.shutdownNow();
+      assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testResponseTtfbWaitsForDelayedHeaderWrite() throws Exception {
+    for (boolean writeSucceeds : new boolean[]{false, true}) {
+      AtomicReference<ChannelPromise> pendingWrite = new AtomicReference<>();
+      ChannelOutboundHandlerAdapter delayHandler = new ChannelOutboundHandlerAdapter() {
+        @Override
+        public void write(ChannelHandlerContext ctx, Object message, ChannelPromise promise) {
+          if (message instanceof HttpResponse) {
+            pendingWrite.set(promise);
+            ctx.write(message);
+          } else {
+            ctx.write(message, promise);
+          }
+        }
+      };
+      EmbeddedChannel channel = new EmbeddedChannel(delayHandler, new ChunkedWriteHandler(),
+          new MockNettyMessageProcessor());
+      try {
+        channel.writeInbound(RestTestUtils.createRequest(HttpMethod.HEAD, "/", null));
+        MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+        RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Delayed", new MetricRegistry());
+        processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+        processor.getRestResponseChannel().setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        processor.getRestResponseChannel().onResponseComplete(null);
+        assertNotNull(pendingWrite.get());
+        assertEquals(0, metrics.operationCount.getCount());
+        assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
+        if (writeSucceeds) {
+          pendingWrite.get().setSuccess();
+        } else {
+          pendingWrite.get().setFailure(new IOException("write failed"));
+        }
+        channel.runPendingTasks();
+        assertEquals(1, metrics.operationCount.getCount());
+        assertEquals(writeSucceeds ? 1 : 0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+        assertEquals(writeSucceeds ? 1 : 0, metrics.successfulResponseTtfbSampleRate.getCount());
+        assertEquals(writeSucceeds ? 0 : 1, metrics.responseDeliveryFailureCount.getCount());
+      } finally {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  @Test
+  public void testResponseTtfbWaitsForStreamingCompletion() throws Exception {
+    for (ResponseStatus status : new ResponseStatus[]{ResponseStatus.Ok, ResponseStatus.PartialContent}) {
+      for (boolean failAfterHeaders : new boolean[]{false, true}) {
+        EmbeddedChannel channel = createEmbeddedChannel();
+        try {
+          channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+          MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+          RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Stream", new MetricRegistry());
+          processor.getRequest().getMetricsTracker().injectMetrics(metrics);
+          NettyResponseChannel responseChannel = processor.getRestResponseChannel();
+          responseChannel.setStatus(status);
+          responseChannel.write(ByteBuffer.wrap(new byte[]{1, 2, 3}), null);
+          assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+          responseChannel.onResponseComplete(failAfterHeaders ? new IOException("body failed") : null);
+          channel.runPendingTasks();
+          assertEquals(failAfterHeaders ? 0 : 1, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+          assertEquals(failAfterHeaders ? 0 : 1, metrics.successfulResponseTtfbSampleRate.getCount());
+          assertEquals(failAfterHeaders ? 1 : 0, metrics.responseDeliveryFailureCount.getCount());
+          assertEquals(0, metrics.serverErrorResponseNioTimeToFirstByteInMs.getCount());
+          assertEquals(1, metrics.operationCount.getCount());
+          assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
+        } finally {
+          channel.finishAndReleaseAll();
+        }
+      }
+    }
   }
 
   @Test

@@ -290,7 +290,7 @@ public class FrontendRestRequestServiceTest {
         RestRequest request = spy(createRestRequest(method, uri, null, null));
         doReturn(ssl).when(request).isSslUsed();
         Map<String, Long> before = metricRegistry.getCounters().entrySet().stream()
-            .filter(entry -> entry.getKey().endsWith("NotFoundCount"))
+            .filter(entry -> entry.getKey().endsWith("NotFoundCount") || entry.getKey().endsWith("ClientErrorCount"))
             .filter(entry -> entry.getKey().startsWith(FrontendRestRequestService.class.getName() + ".")
                 || entry.getKey().startsWith(NamedBlobListHandler.class.getName() + "."))
             .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getCount()));
@@ -302,9 +302,12 @@ public class FrontendRestRequestServiceTest {
         String expectedMetric = MetricRegistry.name(
             operation.equals("ListBlobs") ? NamedBlobListHandler.class : FrontendRestRequestService.class,
             (routerGet ? "GetBlob" : operation) + (ssl ? "Ssl" : "") + "NotFoundCount");
-        before.forEach((name, count) -> assertEquals(name, count + (name.equals(expectedMetric) ? 1 : 0),
+        String expectedClientErrorMetric = expectedMetric.replace("NotFoundCount", "ClientErrorCount");
+        before.forEach((name, count) -> assertEquals(name,
+            count + (name.equals(expectedMetric) || name.equals(expectedClientErrorMetric) ? 1 : 0),
             metricRegistry.getCounters().get(name).getCount()));
         assertTrue(expectedMetric, before.containsKey(expectedMetric));
+        assertTrue(expectedClientErrorMetric, before.containsKey(expectedClientErrorMetric));
       }
     }
     verify(namedBlobDb, times(4)).get(any(), any(), eq("missing"), any(), anyBoolean());

@@ -33,6 +33,15 @@ import com.codahale.metrics.MetricRegistry;
  * For a 404 ratio across transports and encryption modes, sum counter deltas over the same interval for the base,
  * {@code Ssl}, {@code Encrypted}, and {@code SslEncrypted} variants that exist, then divide summed 404s by summed counts.
  * GET encryption classification occurs after blob metadata is returned; lookup misses use the base or {@code Ssl} variant.
+ * <p/>
+ * Response TTFB histograms are additive to the all-request {@code NioTimeToFirstByteInMs}. They measure from request
+ * receipt to final header-write submission, recorded only after successful response delivery. Successful responses
+ * are 2xx or 304; delivered 4xx and 5xx have separate histograms. Each {@code ResponseTtfbSampleRate} meter marks
+ * exactly the corresponding histogram's samples. These server-side observations do not prove client receipt.
+ * Missing timing never supplies a zero sample: it increments {@code ResponseTtfbMissingCount}. Failed or incomplete
+ * delivery increments {@code ResponseDeliveryFailureCount}, including failures after successful headers.
+ * {@code ClientErrorCount} counts effective 4xx outcomes even without delivered headers; it includes 429 and
+ * synthetic client-error classifications. Use the existing request {@code Count} for its ratio denominator.
  */
 public class RestRequestMetrics {
   static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTimeInMs";
@@ -64,6 +73,15 @@ public class RestRequestMetrics {
   final Histogram nioResponseProcessingTimeInMs;
   final Histogram nioRoundTripTimeInMs;
   final Histogram nioTimeToFirstByteInMs;
+  final Histogram successfulResponseNioTimeToFirstByteInMs;
+  final Histogram clientErrorResponseNioTimeToFirstByteInMs;
+  final Histogram serverErrorResponseNioTimeToFirstByteInMs;
+  final Meter successfulResponseTtfbSampleRate;
+  final Meter clientErrorResponseTtfbSampleRate;
+  final Meter serverErrorResponseTtfbSampleRate;
+  final Counter clientErrorCount;
+  final Counter responseDeliveryFailureCount;
+  final Counter responseTtfbMissingCount;
 
   final Histogram scRequestProcessingTimeInMs;
   final Histogram scRequestProcessingWaitTimeInMs;
@@ -103,6 +121,23 @@ public class RestRequestMetrics {
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_ROUND_TRIP_TIME_SUFFIX));
     nioTimeToFirstByteInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_TIME_TO_FIRST_BYTE_SUFFIX));
+    successfulResponseNioTimeToFirstByteInMs = metricRegistry.histogram(
+        MetricRegistry.name(ownerClass, requestType + "SuccessfulResponseNioTimeToFirstByteInMs"));
+    clientErrorResponseNioTimeToFirstByteInMs = metricRegistry.histogram(
+        MetricRegistry.name(ownerClass, requestType + "ClientErrorResponseNioTimeToFirstByteInMs"));
+    serverErrorResponseNioTimeToFirstByteInMs = metricRegistry.histogram(
+        MetricRegistry.name(ownerClass, requestType + "ServerErrorResponseNioTimeToFirstByteInMs"));
+    successfulResponseTtfbSampleRate =
+        metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + "SuccessfulResponseTtfbSampleRate"));
+    clientErrorResponseTtfbSampleRate =
+        metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + "ClientErrorResponseTtfbSampleRate"));
+    serverErrorResponseTtfbSampleRate =
+        metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + "ServerErrorResponseTtfbSampleRate"));
+    clientErrorCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ClientErrorCount"));
+    responseDeliveryFailureCount =
+        metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ResponseDeliveryFailureCount"));
+    responseTtfbMissingCount =
+        metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ResponseTtfbMissingCount"));
 
     scRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_TIME_SUFFIX));
