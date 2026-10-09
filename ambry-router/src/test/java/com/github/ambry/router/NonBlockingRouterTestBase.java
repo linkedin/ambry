@@ -686,7 +686,7 @@ public class NonBlockingRouterTestBase {
           break;
         case DELETE:
           futureResult = new FutureResult<Void>();
-          deleteManager.submitDeleteBlobOperation(blobId.getID(), null, futureResult, null, null);
+          deleteManager.submitDeleteBlobOperation(blobId.getID(), null, futureResult, null, null, null);
           break;
       }
       router.currentOperationsCount.incrementAndGet();

@@ -34,6 +34,7 @@ import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
@@ -103,6 +104,7 @@ public class NamedBlobDeleteHandlerTest {
 
   private final MockTime time = new MockTime();
   private final FrontendMetrics metrics;
+  private final MetricRegistry registry = new MetricRegistry();
   private final InMemoryRouter router;
   private final AmbryIdConverterFactory idConverterFactory;
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
@@ -127,7 +129,7 @@ public class NamedBlobDeleteHandlerTest {
             namedBlobDb);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP, idConverterFactory);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    metrics = new FrontendMetrics(CLUSTER_MAP.getMetricRegistry(), frontendConfig);
+    metrics = new FrontendMetrics(registry, frontendConfig);
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + BLOBNAME;
@@ -139,6 +141,25 @@ public class NamedBlobDeleteHandlerTest {
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
             injector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
+  }
+
+  @Test
+  public void testAccountInjectionFailureRecordsNoRemoteAttempt() throws Exception {
+    RestRequest request = getDeleteRestRequest(new JSONObject(), "/named/missing-account/container/blob");
+    request.getMetricsTracker().injectMetrics(new RestRequestMetrics(getClass(), "BeforeHandler", registry));
+    String cohort = MetricRegistry.name(FrontendRestRequestService.class, "DeleteBlobNoRemoteAttemptRate");
+    long before = registry.getMeters().get(cohort).getCount();
+    String total = MetricRegistry.name(getClass(), "BeforeHandlerCount");
+    long totalBefore = registry.getCounters().get(total).getCount();
+    try {
+      deleteBlobHandler.handle(request, new MockRestResponseChannel(), (result, exception) -> fail("Unexpected callback"));
+      fail("Missing account should fail");
+    } catch (RestServiceException expected) {
+      request.getMetricsTracker().markFailure();
+    }
+    request.getMetricsTracker().recordMetrics();
+    assertEquals(before + 1, registry.getMeters().get(cohort).getCount());
+    assertEquals(totalBefore + 1, registry.getCounters().get(total).getCount());
   }
 
   @Test

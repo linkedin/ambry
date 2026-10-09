@@ -30,6 +30,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.DeleteRequestMetrics;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -258,7 +259,8 @@ public class OperationController implements Runnable {
    *                            attempted. Set this to false if it is known that the given blob is a data chunk.
    */
   protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
-      final Callback<Void> callback, boolean attemptChunkDeletes, QuotaChargeCallback quotaChargeCallback) {
+      final Callback<Void> callback, boolean attemptChunkDeletes, QuotaChargeCallback quotaChargeCallback,
+      DeleteRequestMetrics.Tracker deleteRequestTracker) {
     try {
       deleteManager.submitDeleteBlobOperation(blobIdStr, serviceId, futureResult,
           (Void result, Exception exception) -> {
@@ -274,7 +276,7 @@ public class OperationController implements Runnable {
             if (callback != null) {
               callback.onCompletion(result, exception);
             }
-          }, quotaChargeCallback);
+          }, quotaChargeCallback, deleteRequestTracker);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onDeleteBlobError(e);
@@ -735,12 +737,13 @@ class BackgroundDeleter extends OperationController {
    */
   @Override
   protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
-      final Callback<Void> callback, boolean attemptChunkDeletes, QuotaChargeCallback quotaChargeCallback) {
+      final Callback<Void> callback, boolean attemptChunkDeletes, QuotaChargeCallback quotaChargeCallback,
+      DeleteRequestMetrics.Tracker deleteRequestTracker) {
     Supplier<Void> deleteCall = () -> {
       super.deleteBlob(blobIdStr, serviceId, futureResult, (Void result, Exception e) -> {
         callback.onCompletion(result, e);
         concurrentBackgroundDeleteOperationCount.decrementAndGet();
-      }, attemptChunkDeletes, quotaChargeCallback);
+      }, attemptChunkDeletes, quotaChargeCallback, deleteRequestTracker);
       return null;
     };
     if (routerConfig.routerBackgroundDeleterMaxConcurrentOperations > 0) {

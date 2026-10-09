@@ -19,6 +19,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.DeleteBlobHandler;
 import com.github.ambry.frontend.FrontendMetrics;
+import com.github.ambry.rest.DeleteRequestMetrics;
 import com.github.ambry.rest.NoOpResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -71,6 +72,8 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
+    restRequest.getMetricsTracker().setDeleteRequestTracker(new DeleteRequestMetrics.Tracker(
+        restRequest.isSslUsed() ? metrics.batchDeleteBlobSslRequestMetrics : metrics.batchDeleteBlobRequestMetrics));
 
     // Create the channel to read the request body
     RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel();
@@ -143,6 +146,8 @@ public class S3BatchDeleteHandler extends S3BaseHandler<ReadableStreamChannel> {
         RequestPath newRequestPath =
             RequestPath.parse(singleDeletePath, restRequest.getArgs(), new ArrayList<>(), requestPath.getClusterName());
         WrappedRestRequest singleDeleteRequest = new WrappedRestRequest(restRequest);
+        singleDeleteRequest.getMetricsTracker()
+            .setDeleteRequestTracker(restRequest.getMetricsTracker().getDeleteRequestTracker());
         singleDeleteRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
         singleDeleteRequest.removeArg(BATCH_DELETE_QUERY_PARAM);
         NoOpResponseChannel noOpResponseChannel = new NoOpResponseChannel();

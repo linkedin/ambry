@@ -52,6 +52,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 @RunWith(Parameterized.class)
@@ -65,6 +66,7 @@ public class S3DeleteHandlerTest {
   private FrontendConfig frontendConfig;
   private NamedBlobPutHandler namedBlobPutHandler;
   private S3DeleteHandler s3DeleteHandler;
+  private final MetricRegistry registry = new MetricRegistry();
   private final boolean dbEnableHardDelete;
 
   @Parameterized.Parameters
@@ -92,6 +94,8 @@ public class S3DeleteHandlerTest {
       String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), key);
       RestRequest request =
           FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, new JSONObject(), null);
+      request = spy(request);
+      doReturn(dbEnableHardDelete).when(request).isSslUsed();
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       FutureResult<Void> futureResult = new FutureResult<>();
       request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
@@ -99,6 +103,14 @@ public class S3DeleteHandlerTest {
       s3DeleteHandler.handle(request, restResponseChannel, futureResult::done);
       assertNull(futureResult.get());
       assertEquals("Mismatch on status", ResponseStatus.NoContent, restResponseChannel.getStatus());
+      String prefix = MetricRegistry.name(FrontendRestRequestService.class,
+          "DeleteBlob" + (dbEnableHardDelete ? "Ssl" : ""));
+      long before = registry.getMeters().get(prefix + "NoRemoteAttemptRate").getCount();
+      request.getMetricsTracker().nioMetricsTracker.markFirstByteSent();
+      request.getMetricsTracker().recordMetrics();
+      assertEquals(before + 1, registry.getMeters().get(prefix + "NoRemoteAttemptRate").getCount());
+      assertEquals(before + 1, registry.getMeters().get(prefix + "Rate").getCount());
+      assertEquals(0, registry.getMeters().get(prefix + "RemoteAttemptRate").getCount());
       return null;
     };
     // 1. Delete the object
@@ -116,7 +128,7 @@ public class S3DeleteHandlerTest {
     properties.setProperty(MySqlNamedBlobDbConfig.ENABLE_HARD_DELETE, Boolean.toString(dbEnableHardDelete));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    FrontendMetrics metrics = new FrontendMetrics(registry, frontendConfig);
     AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     IdSigningService idSigningService = new AmbryIdSigningService();
     AmbrySecurityServiceFactory securityServiceFactory =

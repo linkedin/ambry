@@ -17,6 +17,25 @@ Requires JDK version 1.11 - 1.14.
 ## Documentation
 Detailed documentation is available at https://github.com/linkedin/ambry/wiki
 
+### DELETE request latency
+
+`FrontendRestRequestService` registers additive DELETE cohorts under
+`com.github.ambry.frontend.FrontendRestRequestService.<request><cohort><measure>`.
+Requests are `DeleteBlob`, `DeleteBlobSsl`, `BatchDeleteBlob`, and `BatchDeleteBlobSsl`;
+measures are the `NioTimeToFirstByteInMs` histogram and `Rate` meter.
+Each finalized request entering the blob-delete or S3 batch-delete handler contributes to one cohort:
+`NoRemoteAttempt` (no remote DELETE dispatch observed), `RemoteAttempt` (a remote DELETE registered for dispatch),
+or `OnDemandRepair` (synchronous repair initiated, with precedence over remote dispatch).
+Dispatch includes network failures and does not establish server receipt. `NoRemoteAttempt` includes handler errors,
+cache hits, and backend paths without observed remote DELETE dispatch; it does not establish successful local routing.
+Earlier preprocessing failures retain their existing metrics.
+
+Cohorts share the existing request's full time to first response byte, including frontend wait, repair, and retry.
+Requests ending without a first byte retain the existing zero TTFB value. Classification freezes at finalization.
+Multi-ID conversion and S3 batch children share one cohort; background deletes produce no frontend cohort samples.
+Existing combined metrics and request-satisfaction thresholds remain unchanged. Export both measures for every cohort
+and request variant; the meter supplies request volume independently of histogram export support.
+
 ## Research
 Paper introducing Ambry at [SIGMOD 2016](http://sigmod2016.org/) -> http://dprg.cs.uiuc.edu/data/files/2016/ambry.pdf
 

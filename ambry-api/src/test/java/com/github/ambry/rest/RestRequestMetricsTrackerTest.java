@@ -16,8 +16,11 @@ package com.github.ambry.rest;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.frontend.ContainerMetrics;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -27,6 +30,66 @@ import static org.junit.Assert.*;
  * Unit tests for {@link RestRequestMetricsTracker}.
  */
 public class RestRequestMetricsTrackerTest {
+
+  @Test
+  public void testDeleteCohortsPreserveTotalsAndFreezeAtFinalization() throws Exception {
+    String[] paths = {"NoRemoteAttempt", "RemoteAttempt", "OnDemandRepair"};
+    for (String selected : paths) {
+      for (boolean failed : new boolean[]{false, true}) {
+        MetricRegistry registry = new MetricRegistry();
+        RestRequestMetrics totals = new RestRequestMetrics(getClass(), "DeleteBlob", registry);
+        RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+        tracker.injectMetrics(totals);
+        DeleteRequestMetrics.Tracker deleteTracker =
+            new DeleteRequestMetrics.Tracker(new DeleteRequestMetrics(getClass(), "DeleteBlob", registry));
+        tracker.setDeleteRequestTracker(deleteTracker);
+        tracker.nioMetricsTracker.markRequestReceived();
+        if (!failed) {
+          Field received = RestRequestMetricsTracker.NioMetricsTracker.class.getDeclaredField("requestReceivedTime");
+          received.setAccessible(true);
+          received.setLong(tracker.nioMetricsTracker, System.currentTimeMillis() - 1000);
+          tracker.nioMetricsTracker.markFirstByteSent();
+          assertTrue(tracker.getTimeToFirstByteInMs() >= 1000);
+        } else {
+          tracker.markFailure();
+          tracker.markUnsatisfied();
+          tracker.markServerError();
+          tracker.markIdleTimeoutTermination();
+        }
+        if (!selected.equals("NoRemoteAttempt")) {
+          deleteTracker.markRemoteAttempt();
+        }
+        if (selected.equals("OnDemandRepair")) {
+          CompletableFuture.allOf(CompletableFuture.runAsync(deleteTracker::markOnDemandRepair),
+              CompletableFuture.runAsync(deleteTracker::markRemoteAttempt)).get(5, TimeUnit.SECONDS);
+          deleteTracker.markRemoteAttempt();
+        }
+        assertEquals(0, totals.operationCount.getCount());
+        tracker.recordMetrics();
+        deleteTracker.markOnDemandRepair();
+        deleteTracker.markRemoteAttempt();
+        tracker.recordMetrics();
+        for (String path : paths) {
+          String prefix = MetricRegistry.name(getClass(), "DeleteBlob" + path);
+          Histogram histogram = registry.getHistograms().get(prefix + "NioTimeToFirstByteInMs");
+          long expected = path.equals(selected) ? 1 : 0;
+          assertEquals(expected, histogram.getCount());
+          assertEquals(expected, registry.getMeters().get(prefix + "Rate").getCount());
+          if (expected == 1) {
+            assertArrayEquals(new long[]{tracker.getTimeToFirstByteInMs()}, histogram.getSnapshot().getValues());
+          }
+        }
+        assertEquals(1, totals.operationCount.getCount());
+        assertEquals(1, totals.operationRate.getCount());
+        assertEquals(failed ? 1 : 0, totals.operationError.getCount());
+        assertEquals(failed ? 1 : 0, totals.unsatisfiedRequestCount.getCount());
+        assertEquals(failed ? 0 : 1, totals.satisfiedRequestCount.getCount());
+        assertEquals(failed ? 1 : 0, totals.serverErrorCount.getCount());
+        assertArrayEquals(new long[]{tracker.getTimeToFirstByteInMs()},
+            totals.nioTimeToFirstByteInMs.getSnapshot().getValues());
+      }
+    }
+  }
 
   @Test
   public void testNotFoundCountUsesRecordedStatus() {
