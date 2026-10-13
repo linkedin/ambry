@@ -69,6 +69,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   @Test
   public void testPurgeAllVersionsAcrossPages() throws Exception {
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobId = getBlobId(account, container);
@@ -95,6 +96,8 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     } while (cursor != null);
     assertEquals(expectedVersions, purgedVersions);
     assertTrue(namedBlobDb.pullStaleBlobs(container, "\0", 2, true).get().getStaleBlobs().isEmpty());
+    // Cleanup timestamps use wall-clock time, while GET checks deletion against the shared mock clock.
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), "same-name"),
         RestServiceErrorCode.Deleted);
   }
