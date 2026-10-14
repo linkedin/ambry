@@ -37,12 +37,14 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,6 +71,10 @@ public class NamedBlobsCleanupRunner implements Runnable {
   private final Set<String> excludedContainers;
   private final Set<String> excludedAccounts;
   private final Time time;
+  private final Predicate<Container> purgeEligibility;
+  private final boolean purgeDryRun;
+  private final Counter purgePreviewBlobCount;
+  private final Counter purgedBlobCount;
   /**
    * Per-container resume cursor keyed by "{accountId}_{containerId}", retained in memory across scheduled runs so a
    * container whose scan was killed and deferred resumes from its last processed page on the next run instead of
@@ -138,6 +144,19 @@ public class NamedBlobsCleanupRunner implements Runnable {
         SystemTime.getInstance(), metricRegistry);
   }
 
+  /**
+   * Construct a cleaner with an opt-in policy for purging all versions, including live/latest versions.
+   * Exclusions take precedence. The policy is rechecked before each page and each delete and must verify that
+   * source reads/writes have stopped and the data is no longer needed. External migration/completeness checks
+   * belong in this policy, not in the OSS cleaner. A dry run previews only the first bounded page per container.
+   */
+  public NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Collection<String> excludedContainers, Collection<String> excludedAccounts,
+      Predicate<Container> purgeEligibility, boolean purgeDryRun, MetricRegistry metricRegistry) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, excludedAccounts,
+        SystemTime.getInstance(), metricRegistry, purgeEligibility, purgeDryRun);
+  }
+
   NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds, Time time) {
     this(router, namedBlobDb, accountService, containerDelaySeconds, Collections.emptySet(), time);
@@ -159,6 +178,13 @@ public class NamedBlobsCleanupRunner implements Runnable {
   NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
       int containerDelaySeconds, Collection<String> excludedContainers, Collection<String> excludedAccounts, Time time,
       MetricRegistry metricRegistry) {
+    this(router, namedBlobDb, accountService, containerDelaySeconds, excludedContainers, excludedAccounts, time,
+        metricRegistry, container -> false, true);
+  }
+
+  NamedBlobsCleanupRunner(Router router, NamedBlobDb namedBlobDb, AccountService accountService,
+      int containerDelaySeconds, Collection<String> excludedContainers, Collection<String> excludedAccounts, Time time,
+      MetricRegistry metricRegistry, Predicate<Container> purgeEligibility, boolean purgeDryRun) {
     if (containerDelaySeconds < 0) {
       throw new IllegalArgumentException("containerDelaySeconds must not be negative");
     }
@@ -170,6 +196,12 @@ public class NamedBlobsCleanupRunner implements Runnable {
         excludedContainers == null ? Collections.emptySet() : new HashSet<>(excludedContainers);
     this.excludedAccounts = excludedAccounts == null ? Collections.emptySet() : new HashSet<>(excludedAccounts);
     this.time = time;
+    this.purgeEligibility = Objects.requireNonNull(purgeEligibility, "purgeEligibility");
+    this.purgeDryRun = purgeDryRun;
+    this.purgePreviewBlobCount =
+        metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "PurgePreviewBlobCount"));
+    this.purgedBlobCount =
+        metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "PurgedBlobCount"));
     this.containerCleanupFailedCount =
         metricRegistry.counter(MetricRegistry.name(NamedBlobsCleanupRunner.class, "ContainerFailedCount"));
     this.pageScanKilledCount =
@@ -254,6 +286,12 @@ public class NamedBlobsCleanupRunner implements Runnable {
    */
   private void cleanupContainer(Container container) throws Exception {
     String cursorKey = cursorKey(container);
+    boolean purgeAllVersions = purgeEligibility.test(container);
+    if (purgeAllVersions) {
+      // Purge and normal cleanup have different retention semantics; never reuse a normal cleanup cursor for purge.
+      containerCleanupCursors.remove(cursorKey);
+      logger.warn("All-version purge selected for container {} (dry run: {})", cursorKey, purgeDryRun);
+    }
     // Resume from the cursor saved by a previous run (if this container was deferred after a kill); otherwise start at
     // "\0", the lowest ASCII value, so the scan begins at the start of the container.
     String blobName = containerCleanupCursors.getOrDefault(cursorKey, smallestASCII);
@@ -264,10 +302,14 @@ public class NamedBlobsCleanupRunner implements Runnable {
     }
     int pageSize = 0;  // 0 means the database default (full-size) page.
     int blobNameSkips = 0;
+    StaleNamedBlob lastPurgedBlob = null;
     NamedBlobDb.StaleBlobsWithLatestBlobName staleBlobsWithLatestBlobName;
     do {
+      if (purgeAllVersions && !purgeEligibility.test(container)) {
+        throw new IllegalStateException("Purge eligibility revoked for container " + cursorKey);
+      }
       try {
-        staleBlobsWithLatestBlobName = pullStaleBlobsResilient(container, blobName, pageSize);
+        staleBlobsWithLatestBlobName = pullStaleBlobsResilient(container, blobName, pageSize, purgeAllVersions);
       } catch (PageKilledException e) {
         if (pageSize == 0) {
           // First kill at full size: shrink and retry the same cursor so the scan reads fewer rows and the cursor can
@@ -276,6 +318,9 @@ public class NamedBlobsCleanupRunner implements Runnable {
           logger.warn("Stale-blob scan for container {} was killed at its cursor; shrinking the page to {} to make "
               + "progress instead of retrying the same query", container.getId(), pageSize);
           continue;
+        }
+        if (purgeAllVersions) {
+          throw new IllegalStateException("Purge scan failed at the shrunk page size for container " + cursorKey, e);
         }
         // Even the shrunk page was killed: the blob name at this cursor has too many live versions to scan under the
         // database time limit. Skip past it with a cheap indexed lookup so the rest of the container is still cleaned;
@@ -312,11 +357,29 @@ public class NamedBlobsCleanupRunner implements Runnable {
             MAX_BLOB_NAME_SKIPS_PER_RUN);
         continue;
       }
-      List<StaleNamedBlob> batchStaleBlobs = staleBlobsWithLatestBlobName.getStaleBlobs();
+      List<StaleNamedBlob> batchStaleBlobs = new ArrayList<>(staleBlobsWithLatestBlobName.getStaleBlobs());
+      if (purgeAllVersions && lastPurgedBlob != null && !batchStaleBlobs.isEmpty()) {
+        StaleNamedBlob firstBlob = batchStaleBlobs.get(0);
+        if (firstBlob.getBlobName().equals(lastPurgedBlob.getBlobName())
+            && firstBlob.getVersion() <= lastPurgedBlob.getVersion()) {
+          throw new IllegalStateException("Purge page did not advance after metadata cleanup for container " + cursorKey);
+        }
+      }
+      if (purgeAllVersions && purgeDryRun) {
+        purgePreviewBlobCount.inc(batchStaleBlobs.size());
+        logger.warn("Purge dry run for container {}: first page has {} candidates; more pages: {}", cursorKey,
+            batchStaleBlobs.size(), staleBlobsWithLatestBlobName.getLatestBlob() != null);
+        return;
+      }
       List<StaleNamedBlob> failedResults = new ArrayList<>();
       for (StaleNamedBlob staleBlob : batchStaleBlobs) {
+        if (purgeAllVersions && !purgeEligibility.test(container)) {
+          throw new IllegalStateException("Purge eligibility revoked for container " + cursorKey);
+        }
         try {
           router.deleteBlob(staleBlob.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
+        } catch (InterruptedException e) {
+          throw e;
         } catch (Exception e) {
           if (e.getMessage() == null || !e.getMessage().contains(RouterErrorCode.BlobDoesNotExist.name())) {
             logger.error("Failed to cleanup named stale blob {}", staleBlob, e);
@@ -326,7 +389,18 @@ public class NamedBlobsCleanupRunner implements Runnable {
       }
 
       batchStaleBlobs.removeAll(failedResults);
-      namedBlobDb.cleanupStaleData(batchStaleBlobs);
+      CompletableFuture<Integer> cleanupFuture = namedBlobDb.cleanupStaleData(batchStaleBlobs);
+      if (purgeAllVersions) {
+        // The next scan revisits the last name; it must see these rows soft-deleted before it can make progress.
+        cleanupFuture.get(PULL_STALE_BLOBS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        purgedBlobCount.inc(batchStaleBlobs.size());
+        if (!failedResults.isEmpty()) {
+          throw new IllegalStateException("Purge blob deletions failed for container " + cursorKey);
+        }
+        if (!batchStaleBlobs.isEmpty()) {
+          lastPurgedBlob = batchStaleBlobs.get(batchStaleBlobs.size() - 1);
+        }
+      }
 
       if (!batchStaleBlobs.isEmpty()) {
         logger.info("Named Blobs Cleanup Runner processed {} stale blobs ({} failed deletions)",
@@ -367,12 +441,13 @@ public class NamedBlobsCleanupRunner implements Runnable {
    * @throws Exception if a retriable failure persists after {@link #MAX_PULL_ATTEMPTS} attempts.
    */
   private NamedBlobDb.StaleBlobsWithLatestBlobName pullStaleBlobsResilient(Container container, String blobName,
-      int pageSize) throws Exception {
+      int pageSize, boolean purgeAllVersions) throws Exception {
     Exception lastException = null;
     for (int attempt = 1; attempt <= MAX_PULL_ATTEMPTS; attempt++) {
       try {
         CompletableFuture<NamedBlobDb.StaleBlobsWithLatestBlobName> future =
-            pageSize > 0 ? namedBlobDb.pullStaleBlobs(container, blobName, pageSize)
+            purgeAllVersions ? namedBlobDb.pullStaleBlobs(container, blobName, pageSize, true)
+                : pageSize > 0 ? namedBlobDb.pullStaleBlobs(container, blobName, pageSize)
                 : namedBlobDb.pullStaleBlobs(container, blobName);
         return future.get(PULL_STALE_BLOBS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       } catch (InterruptedException e) {

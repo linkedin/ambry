@@ -125,3 +125,55 @@ mysql> USE AmbryRepairRequests; SOURCE ./ambry-mysql/src/main/resources/AmbryRep
 ```
 
 Then run `./gradlew build` to build and run all unit tests.
+
+## Named-blob cleaner purge (review proposal)
+
+Normal named-blob cleanup retains the latest version. The optional
+`NamedBlobsCleanupRunner` constructor accepting a `Predicate<Container> purgeEligibility`
+and `boolean purgeDryRun` can instead delete every unexpired, non-deleted mapping in
+selected containers, including latest READY versions and recent IN_PROGRESS versions.
+Existing constructors never enable purge. Container/account exclusions and disabled
+named-blob mode still take precedence; container lifecycle status is not changed.
+
+The caller owns the eligibility policy. It must require explicit per-container opt-in,
+verify that the source data is no longer needed, and prevent source reads and writes
+before returning `true`. For a migration, write routing alone is not proof of read
+cutover or destination completeness. Keep this policy live so removing approval
+acts as a kill switch; it is checked before every page and every blob deletion.
+A check cannot cancel an already-issued deletion, so it does not replace fencing
+source traffic. Start with `purgeDryRun=true`: this reports only the first bounded page
+per eligible container, not a full-container count, and performs no blob or metadata
+deletion for those containers. Other containers continue normal cleanup.
+
+`MySqlNamedBlobDb` scans purge candidates in ascending primary-key order rather than
+normal cleanup's descending version order. The last blob name remains an inclusive
+cursor so a name with more versions than a page is revisited. Purge waits for metadata
+soft-deletion before fetching another page and stops on deletion or metadata failure,
+or if the next page repeats versions that should have been removed;
+the next scheduled run restarts its purge sweep. Unlike normal cleanup, it never skips
+a name after repeated query kills. Primary-key ordering avoids the mixed-order filesort,
+but filtering already-deleted rows can still require scanning many index entries:
+this is not a fixed query-latency guarantee or a fix for normal-cleanup scans.
+
+Database implementations without purge support fail explicitly through the new default
+`NamedBlobDb.pullStaleBlobs` overload. Blob deletion continues to use the supplied
+router's existing offline `deleteBlob(blobId, serviceId)` path. This OSS change does not
+guarantee primary-only routing in a composite router; that must be verified by its
+integration. Migration-state/completeness checks, deployment configuration, composite
+database delegation, and any secondary metadata cleanup are deliberately outside this
+OSS proposal. Expired/already-deleted mappings remain under their existing cleanup
+mechanisms; metadata soft-deletion does not itself immediately reclaim storage bytes.
+
+`PurgePreviewBlobCount` counts dry-run candidates and `PurgedBlobCount` counts versions
+processed after metadata cleanup succeeds. Failures use the existing container failure
+counter and logs. These are cumulative counters, not distinct-blob inventories.
+
+Focused validation (the integration tests require the local MySQL setup above and the
+`AmbryNamedBlobs` schema from `ambry-named-mysql/src/main/resources/NamedBlobsSchema.ddl`):
+
+```bash
+./gradlew -PdisableShipkit :ambry-frontend:test --tests com.github.ambry.frontend.NamedBlobsCleanupRunnerTest \
+  :ambry-named-mysql:test --tests com.github.ambry.named.MySqlNamedBlobDbTest
+./gradlew -PdisableShipkit :ambry-named-mysql:intTest \
+  --tests 'com.github.ambry.named.MySqlNamedBlobDbIntegrationTest.testPurge*'
+```

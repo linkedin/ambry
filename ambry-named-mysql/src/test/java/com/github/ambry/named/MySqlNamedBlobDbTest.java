@@ -156,6 +156,53 @@ public class MySqlNamedBlobDbTest {
     namedBlobDb.cleanupStaleData(staleNamedBlobs);
   }
 
+  @Test
+  public void testPurgeReturnsLatestAndInProgressWithoutRetention() throws Exception {
+    Connection connection = mock(Connection.class);
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ResultSet rows = mock(ResultSet.class);
+    when(dataSourceFactory.dataSources.get(localDatacenter).getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(MySqlNamedBlobDb.GET_BLOBS_FOR_CONTAINER_PURGE)).thenReturn(statement);
+    when(statement.executeQuery()).thenReturn(rows);
+    when(rows.next()).thenReturn(true, true, false);
+    when(rows.getShort(1)).thenReturn(account.getId());
+    when(rows.getShort(2)).thenReturn(container.getId());
+    when(rows.getString(3)).thenReturn("same-name");
+    when(rows.getBytes(4)).thenReturn(Utils.base64DecodeUrlSafe(id));
+    when(rows.getLong(5)).thenReturn(1L, 2L);
+    when(rows.getInt(6)).thenReturn(NamedBlobState.READY.ordinal(), NamedBlobState.IN_PROGRESS.ordinal());
+    when(rows.getTimestamp(7)).thenReturn(new java.sql.Timestamp(System.currentTimeMillis()));
+
+    NamedBlobDb.StaleBlobsWithLatestBlobName page = namedBlobDb.pullStaleBlobs(container, "\0", 2, true).get();
+
+    assertEquals(2, page.getStaleBlobs().size());
+    assertEquals(1L, page.getStaleBlobs().get(0).getVersion());
+    assertEquals(2L, page.getStaleBlobs().get(1).getVersion());
+    assertEquals("same-name", page.getLatestBlob());
+    verify(statement).setInt(1, container.getId());
+    verify(statement).setInt(2, container.getParentAccountId());
+    verify(statement).setString(3, "\0");
+    verify(statement).setInt(4, 2);
+    assertTrue(MySqlNamedBlobDb.GET_BLOBS_FOR_CONTAINER_PURGE.contains("ORDER BY blob_name ASC, version ASC"));
+  }
+
+  @Test
+  public void testPurgeEmptyPageAndDefaultLimit() throws Exception {
+    Connection connection = mock(Connection.class);
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ResultSet rows = mock(ResultSet.class);
+    when(dataSourceFactory.dataSources.get(localDatacenter).getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(MySqlNamedBlobDb.GET_BLOBS_FOR_CONTAINER_PURGE)).thenReturn(statement);
+    when(statement.executeQuery()).thenReturn(rows);
+
+    NamedBlobDb.StaleBlobsWithLatestBlobName page = namedBlobDb.pullStaleBlobs(container, "\0", 0, true).get();
+
+    assertTrue(page.getStaleBlobs().isEmpty());
+    assertNull(page.getLatestBlob());
+    int defaultPageSize = buildSmallPoolConfig(1, 1, 100).queryStaleDataMaxResults;
+    verify(statement).setInt(4, defaultPageSize);
+  }
+
   /**
    * Verify that {@link MySqlNamedBlobDb.TransactionExecutor} registers the per-datacenter queue-size and
    * active-count gauges, the per-datacenter rejected-count counter, and the per-datacenter enqueue-wait histogram
@@ -724,4 +771,3 @@ public class MySqlNamedBlobDbTest {
         partitionId, false, BlobId.BlobDataType.SIMPLE).getID();
   }
 }
-
