@@ -650,8 +650,6 @@ public class NettyResponseChannelTest {
           assertEquals(1, metrics.operationCount.getCount());
           assertEquals(1, metrics.operationRate.getCount());
           assertEquals(0, registry.getCounters().get(prefix + "ResponseTtfbMissingCount").getCount());
-          assertEquals(statuses[i].isClientError() ? 1 : 0,
-              registry.getCounters().get(prefix + "ClientErrorCount").getCount());
           assertEquals(statuses[i].isServerError() ? 1 : 0, metrics.serverErrorCount.getCount());
           assertEquals(statuses[i] == ResponseStatus.NotFound ? 1 : 0, metrics.notFoundCount.getCount());
           responseChannel.onResponseComplete(new IOException("late cleanup"));
@@ -689,7 +687,6 @@ public class NettyResponseChannelTest {
         assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
         assertEquals(1, metrics.operationError.getCount());
         assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
-        assertEquals(i < 2 ? 1 : 0, metrics.clientErrorCount.getCount());
         assertEquals(i < 2 ? 0 : 1, metrics.serverErrorCount.getCount());
         if (codes[i] == RestServiceErrorCode.HostLevelThrottled) {
           assertEquals(throttledBefore + 1, processor.getNettyMetrics().hostLevelThrottledCount.getCount());

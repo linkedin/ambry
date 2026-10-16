@@ -321,9 +321,6 @@ public class RestRequestMetricsTracker {
   }
 
   private synchronized void recordResponseMetrics() {
-    if (responseStatus != null && responseStatus.isClientError()) {
-      metrics.clientErrorCount.inc();
-    }
     boolean success = finalResponseStatusCode >= 200 && finalResponseStatusCode < 300
         || finalResponseStatusCode == 304;
     boolean clientError = finalResponseStatusCode >= 400 && finalResponseStatusCode < 500;

@@ -40,8 +40,6 @@ import com.codahale.metrics.MetricRegistry;
  * Each {@code ResponseTtfbSampleRate} meter marks exactly the corresponding histogram's samples at request recording.
  * These are status-based latency measurements, not successful-download or availability metrics.
  * Missing timing never supplies a zero sample: it increments {@code ResponseTtfbMissingCount}.
- * {@code ClientErrorCount} counts effective 4xx outcomes even without delivered headers; it includes 429 and
- * synthetic client-error classifications. Use the existing request {@code Count} for its ratio denominator.
  */
 public class RestRequestMetrics {
   static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTimeInMs";
@@ -79,7 +77,6 @@ public class RestRequestMetrics {
   final Meter successfulResponseTtfbSampleRate;
   final Meter clientErrorResponseTtfbSampleRate;
   final Meter serverErrorResponseTtfbSampleRate;
-  final Counter clientErrorCount;
   final Counter responseTtfbMissingCount;
 
   final Histogram scRequestProcessingTimeInMs;
@@ -132,7 +129,6 @@ public class RestRequestMetrics {
         metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + "ClientErrorResponseTtfbSampleRate"));
     serverErrorResponseTtfbSampleRate =
         metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + "ServerErrorResponseTtfbSampleRate"));
-    clientErrorCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ClientErrorCount"));
     responseTtfbMissingCount =
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ResponseTtfbMissingCount"));
 
