@@ -30,23 +30,21 @@ import static org.junit.Assert.*;
 public class RestRequestMetricsTrackerTest {
 
   @Test
-  public void testResponseTtfbExcludesTerminatedRequests() {
+  public void testResponseTtfbKeepsHeaderStatusForTerminatedRequests() {
     for (int termination = 0; termination < 2; termination++) {
       RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Terminated", new MetricRegistry());
       RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
       tracker.injectMetrics(metrics);
       tracker.nioMetricsTracker.markRequestReceived();
       tracker.markResponseHeaders(200);
-      tracker.markResponseDeliveryCompleted();
       if (termination == 0) {
         tracker.markClientAborted(false);
       } else {
         tracker.markIdleTimeoutTermination();
       }
       tracker.recordMetrics();
-      assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
-      assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
-      assertEquals(1, metrics.responseDeliveryFailureCount.getCount());
+      assertEquals(1, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      assertEquals(1, metrics.successfulResponseTtfbSampleRate.getCount());
       assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
       assertEquals(0, metrics.operationError.getCount());
     }
@@ -63,7 +61,6 @@ public class RestRequestMetricsTrackerTest {
       Field firstByteDuration = RestRequestMetricsTracker.class.getDeclaredField("responseTimeToFirstByteInMs");
       firstByteDuration.setAccessible(true);
       firstByteDuration.setLong(tracker, duration);
-      tracker.markResponseDeliveryCompleted();
       tracker.recordMetrics();
       assertEquals(duration == 0 ? 1 : 0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
       assertEquals(duration == 0 ? 1 : 0, metrics.successfulResponseTtfbSampleRate.getCount());
@@ -83,13 +80,10 @@ public class RestRequestMetricsTrackerTest {
     tracker.recordMetrics();
     assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
     assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
-    assertEquals(1, metrics.responseDeliveryFailureCount.getCount());
     assertEquals(1, metrics.operationCount.getCount());
     tracker.markResponseHeaders(200);
-    tracker.markResponseDeliveryCompleted();
     tracker.recordMetrics();
     assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
-    assertEquals(1, metrics.responseDeliveryFailureCount.getCount());
   }
 
   @Test
@@ -98,7 +92,6 @@ public class RestRequestMetricsTrackerTest {
     RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
     tracker.injectMetrics(metrics);
     tracker.markResponseHeaders(200);
-    tracker.markResponseDeliveryCompleted();
     tracker.recordMetrics();
     assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
     assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
@@ -122,10 +115,9 @@ public class RestRequestMetricsTrackerTest {
       tracker.markResponseHeaders(statusCodes[i]);
       tracker.markResponseHeaders(500);
       tracker.markUnsatisfied();
-      if (statusCodes[i] >= 400) {
-        tracker.markFailure();
-      }
-      tracker.markResponseDeliveryCompleted();
+      tracker.markFailure();
+      tracker.setResponseStatus(ResponseStatus.InternalServerError);
+      tracker.markServerError();
       tracker.recordMetrics();
       for (String population : new String[]{"Successful", "ClientError", "ServerError"}) {
         String prefix = getClass().getName() + ".Final" + population;
@@ -135,7 +127,8 @@ public class RestRequestMetricsTrackerTest {
         assertEquals(count, registry.getMeters().get(prefix + "ResponseTtfbSampleRate").getCount());
       }
       assertEquals(1, metrics.unsatisfiedRequestCount.getCount());
-      assertEquals(statusCodes[i] >= 400 ? 1 : 0, metrics.operationError.getCount());
+      assertEquals(1, metrics.operationError.getCount());
+      assertEquals(1, metrics.serverErrorCount.getCount());
       assertEquals(1, metrics.operationRate.getCount());
       tracker.markResponseHeaders(404);
       tracker.recordMetrics();

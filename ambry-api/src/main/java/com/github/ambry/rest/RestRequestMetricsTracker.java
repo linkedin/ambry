@@ -68,9 +68,6 @@ public class RestRequestMetricsTracker {
   private long bytesTransferred = 0;
   private int finalResponseStatusCode;
   private long responseTimeToFirstByteInMs = -1;
-  private boolean responseDeliveryCompleted;
-  private boolean responseHandlingFailed;
-  private boolean responseDeliveryFailed;
 
   private enum RequestTerminationReason {
     NONE,
@@ -323,24 +320,6 @@ public class RestRequestMetricsTracker {
     }
   }
 
-  synchronized void markResponseDeliveryCompleted() {
-    if (!metricsRecorded.get()) {
-      responseDeliveryCompleted = true;
-    }
-  }
-
-  synchronized void markResponseHandlingFailed() {
-    if (!metricsRecorded.get()) {
-      responseHandlingFailed = true;
-    }
-  }
-
-  synchronized void markResponseDeliveryFailed() {
-    if (!metricsRecorded.get()) {
-      responseDeliveryFailed = true;
-    }
-  }
-
   private synchronized void recordResponseMetrics() {
     if (responseStatus != null && responseStatus.isClientError()) {
       metrics.clientErrorCount.inc();
@@ -349,11 +328,7 @@ public class RestRequestMetricsTracker {
         || finalResponseStatusCode == 304;
     boolean clientError = finalResponseStatusCode >= 400 && finalResponseStatusCode < 500;
     boolean serverFailure = finalResponseStatusCode >= 500 && finalResponseStatusCode < 600;
-    if (!responseDeliveryCompleted || responseDeliveryFailed
-        || requestTerminationReason.get() != RequestTerminationReason.NONE
-        || success && (responseHandlingFailed || failed)) {
-      metrics.responseDeliveryFailureCount.inc();
-    } else if (success || clientError || serverFailure) {
+    if (success || clientError || serverFailure) {
       if (responseTimeToFirstByteInMs < 0) {
         metrics.responseTtfbMissingCount.inc();
       } else if (success) {

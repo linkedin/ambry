@@ -559,7 +559,6 @@ public class NettyMessageProcessorTest {
       delay.completeContinueWrite();
       channel.runPendingTasks();
       assertEquals(1, metrics.successfulResponseTtfbSampleRate.getCount());
-      assertEquals(0, metrics.responseDeliveryFailureCount.getCount());
       assertEquals(0, metrics.responseTtfbMissingCount.getCount());
     } finally {
       channel.finishAndReleaseAll();
@@ -623,7 +622,6 @@ public class NettyMessageProcessorTest {
 
       assertEquals(0, requestMetrics.successfulResponseNioTimeToFirstByteInMs.getCount());
       assertEquals(0, requestMetrics.successfulResponseTtfbSampleRate.getCount());
-      assertEquals(1, requestMetrics.responseDeliveryFailureCount.getCount());
       assertEquals("The failed continue write should record one client abort", 1,
           metricRegistry.getCounters().get(CONTAINER_METRIC_PREFIX + "ClientAbortCount").getCount());
       assertEquals("The continue response should not enter the server-error abort subset", 0,

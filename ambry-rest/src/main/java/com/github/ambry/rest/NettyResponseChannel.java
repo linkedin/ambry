@@ -199,11 +199,6 @@ class NettyResponseChannel implements RestResponseChannel {
   public Future<Long> write(ByteBuf src, Callback<Long> callback) {
     long writeProcessingStartTime = System.currentTimeMillis();
     if (!responseMetadataWriteInitiated.get()) {
-      // Empty responses can finish inline before the existing body validation below runs.
-      if (request != null && src.isReadable() && HttpUtil.isContentLengthSet(responseMetadata)
-          && HttpUtil.getContentLength(responseMetadata) == 0) {
-        request.getMetricsTracker().markResponseDeliveryFailed();
-      }
       maybeWriteResponseMetadata(responseMetadata, new ResponseMetadataWriteListener());
     }
     if (finalResponseMetadata == null) {
@@ -239,10 +234,6 @@ class NettyResponseChannel implements RestResponseChannel {
       return future;
     }
     Chunk chunk = new Chunk(src, callback);
-    if (request != null && HttpUtil.isContentLengthSet(finalResponseMetadata)
-        && totalBytesReceived.get() > HttpUtil.getContentLength(finalResponseMetadata)) {
-      request.getMetricsTracker().markResponseDeliveryFailed();
-    }
     logger.debug("Netty Response Chunk size: {}", src.readableBytes());
     chunksToWrite.add(chunk);
     if (HttpUtil.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpUtil.getContentLength(
@@ -304,10 +295,6 @@ class NettyResponseChannel implements RestResponseChannel {
   @Override
   public void onResponseComplete(Exception exception) {
     long responseCompleteStartTime = System.currentTimeMillis();
-    // Publish failure before responseCompleteCalled lets another writer finish the response.
-    if (exception != null && request != null) {
-      request.getMetricsTracker().markResponseHandlingFailed();
-    }
     try {
       if (responseCompleteCalled.compareAndSet(false, true)) {
         logger.trace("Finished responding to current request on channel {}", ctx.channel());
@@ -344,9 +331,6 @@ class NettyResponseChannel implements RestResponseChannel {
         request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(responseFinishProcessingTime);
       }
     } catch (Exception e) {
-      if (request != null) {
-        request.getMetricsTracker().markResponseDeliveryFailed();
-      }
       logger.error("Swallowing exception encountered during onResponseComplete tasks", e);
       nettyMetrics.responseCompleteTasksError.inc();
       if (!writeFuture.isDone()) {
@@ -923,9 +907,6 @@ class NettyResponseChannel implements RestResponseChannel {
   private void handleChannelWriteFailure(Throwable cause, boolean propagateErrorIfRequired,
       boolean networkWriteFailed) {
     long writeFailureProcessingStartTime = System.currentTimeMillis();
-    if (request != null) {
-      request.getMetricsTracker().markResponseDeliveryFailed();
-    }
     try {
       nettyMetrics.channelWriteError.inc();
       if (networkWriteFailed) {
@@ -1259,9 +1240,6 @@ class NettyResponseChannel implements RestResponseChannel {
     public void operationComplete(ChannelProgressiveFuture future) {
       if (future.isSuccess()) {
         logger.trace("Response sending complete on channel {}", ctx.channel());
-        if (request != null) {
-          request.getMetricsTracker().markResponseDeliveryCompleted();
-        }
         completeRequest(request == null || !request.isKeepAlive(), false, true);
       } else {
         handleChannelWriteFailure(future.cause(), true, true);
@@ -1294,9 +1272,6 @@ class NettyResponseChannel implements RestResponseChannel {
           // this is the case if finalResponseMetadata is a FullHttpResponse.
           // in this case there is nothing more to write.
           if (!writeFuture.isDone()) {
-            if (request != null && shouldCloseRequest) {
-              request.getMetricsTracker().markResponseDeliveryCompleted();
-            }
             writeFuture.setSuccess();
             //Don't close the request when we see 100-continue in EXPECT header.
             completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false, shouldCloseRequest);
@@ -1332,9 +1307,6 @@ class NettyResponseChannel implements RestResponseChannel {
       long writeFinishTime = System.currentTimeMillis();
       long channelWriteTime = writeFinishTime - responseWriteStartTime;
       if (future.isSuccess()) {
-        if (request != null) {
-          request.getMetricsTracker().markResponseDeliveryCompleted();
-        }
         completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), true, true);
       } else {
         handleChannelWriteFailure(future.cause(), true, true);

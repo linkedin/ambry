@@ -35,11 +35,11 @@ import com.codahale.metrics.MetricRegistry;
  * GET encryption classification occurs after blob metadata is returned; lookup misses use the base or {@code Ssl} variant.
  * <p/>
  * Response TTFB histograms are additive to the all-request {@code NioTimeToFirstByteInMs}. They measure from request
- * receipt to final header-write submission, recorded only after successful response delivery. Successful responses
- * are 2xx or 304; delivered 4xx and 5xx have separate histograms. Each {@code ResponseTtfbSampleRate} meter marks
- * exactly the corresponding histogram's samples. These server-side observations do not prove client receipt.
- * Missing timing never supplies a zero sample: it increments {@code ResponseTtfbMissingCount}. Failed or incomplete
- * delivery increments {@code ResponseDeliveryFailureCount}, including failures after successful headers.
+ * receipt to final header-write submission and are classified only by that header's HTTP status: 2xx or 304,
+ * 4xx, or 5xx. Body completeness, write failures, and later internal error status do not change this classification.
+ * Each {@code ResponseTtfbSampleRate} meter marks exactly the corresponding histogram's samples at request recording.
+ * These are status-based latency measurements, not successful-download or availability metrics.
+ * Missing timing never supplies a zero sample: it increments {@code ResponseTtfbMissingCount}.
  * {@code ClientErrorCount} counts effective 4xx outcomes even without delivered headers; it includes 429 and
  * synthetic client-error classifications. Use the existing request {@code Count} for its ratio denominator.
  */
@@ -80,7 +80,6 @@ public class RestRequestMetrics {
   final Meter clientErrorResponseTtfbSampleRate;
   final Meter serverErrorResponseTtfbSampleRate;
   final Counter clientErrorCount;
-  final Counter responseDeliveryFailureCount;
   final Counter responseTtfbMissingCount;
 
   final Histogram scRequestProcessingTimeInMs;
@@ -134,8 +133,6 @@ public class RestRequestMetrics {
     serverErrorResponseTtfbSampleRate =
         metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + "ServerErrorResponseTtfbSampleRate"));
     clientErrorCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ClientErrorCount"));
-    responseDeliveryFailureCount =
-        metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ResponseDeliveryFailureCount"));
     responseTtfbMissingCount =
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + "ResponseTtfbMissingCount"));
 
