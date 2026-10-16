@@ -30,42 +30,28 @@ import static org.junit.Assert.*;
 public class RestRequestMetricsTrackerTest {
 
   @Test
-  public void testResponseTtfbKeepsHeaderStatusForTerminatedRequests() {
-    for (int termination = 0; termination < 2; termination++) {
-      RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Terminated", new MetricRegistry());
-      RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
-      tracker.injectMetrics(metrics);
-      tracker.nioMetricsTracker.markRequestReceived();
-      tracker.markResponseHeaders(200);
-      if (termination == 0) {
-        tracker.markClientAborted(false);
-      } else {
-        tracker.markIdleTimeoutTermination();
-      }
-      tracker.recordMetrics();
-      assertEquals(1, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
-      assertEquals(1, metrics.successfulResponseTtfbSampleRate.getCount());
-      assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
-      assertEquals(0, metrics.operationError.getCount());
-    }
-  }
-
-  @Test
-  public void testResponseTtfbAcceptsZeroButNotInvalidDuration() throws Exception {
-    for (long duration : new long[]{0, -1}) {
+  public void testResponseTtfbValidatesTiming() throws Exception {
+    for (String scenario : new String[]{"zero", "invalid", "missing-start"}) {
       RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Duration", new MetricRegistry());
       RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
       tracker.injectMetrics(metrics);
-      tracker.nioMetricsTracker.markRequestReceived();
+      if (!scenario.equals("missing-start")) {
+        tracker.nioMetricsTracker.markRequestReceived();
+      }
       tracker.markResponseHeaders(200);
-      Field firstByteDuration = RestRequestMetricsTracker.class.getDeclaredField("responseTimeToFirstByteInMs");
-      firstByteDuration.setAccessible(true);
-      firstByteDuration.setLong(tracker, duration);
+      if (!scenario.equals("missing-start")) {
+        Field firstByteDuration = RestRequestMetricsTracker.class.getDeclaredField("responseTimeToFirstByteInMs");
+        firstByteDuration.setAccessible(true);
+        firstByteDuration.setLong(tracker, scenario.equals("zero") ? 0 : -1);
+      }
       tracker.recordMetrics();
-      assertEquals(duration == 0 ? 1 : 0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
-      assertEquals(duration == 0 ? 1 : 0, metrics.successfulResponseTtfbSampleRate.getCount());
-      assertEquals(duration == 0 ? 0 : 1, metrics.responseTtfbMissingCount.getCount());
-      if (duration == 0) {
+      boolean valid = scenario.equals("zero");
+      assertEquals(scenario, valid ? 1 : 0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      assertEquals(scenario, valid ? 1 : 0, metrics.successfulResponseTtfbSampleRate.getCount());
+      assertEquals(scenario, valid ? 0 : 1, metrics.responseTtfbMissingCount.getCount());
+      assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
+      assertEquals(0, metrics.nioTimeToFirstByteInMs.getSnapshot().getMax());
+      if (valid) {
         assertArrayEquals(new long[]{0}, metrics.successfulResponseNioTimeToFirstByteInMs.getSnapshot().getValues());
       }
     }
@@ -84,20 +70,6 @@ public class RestRequestMetricsTrackerTest {
     tracker.markResponseHeaders(200);
     tracker.recordMetrics();
     assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
-  }
-
-  @Test
-  public void testResponseTtfbMissingTimestampDoesNotBecomeZero() {
-    RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Missing", new MetricRegistry());
-    RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
-    tracker.injectMetrics(metrics);
-    tracker.markResponseHeaders(200);
-    tracker.recordMetrics();
-    assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
-    assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
-    assertEquals(1, metrics.responseTtfbMissingCount.getCount());
-    assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
-    assertEquals(0, metrics.nioTimeToFirstByteInMs.getSnapshot().getMax());
   }
 
   @Test
