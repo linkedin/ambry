@@ -568,6 +568,9 @@ class NettyResponseChannel implements RestResponseChannel {
       logger.trace("Sending response with status {} on channel {}", responseMetadata.status(), ctx.channel());
       finalResponseMetadata = responseMetadata;
       ChannelPromise writePromise = ctx.newPromise().addListener(listener);
+      if (request != null) {
+        request.getMetricsTracker().markResponseHeaders(responseMetadata.status().code());
+      }
       ctx.writeAndFlush(responseMetadata, writePromise);
       writtenThisTime = true;
       long writeProcessingTime = System.currentTimeMillis() - writeProcessingStartTime;

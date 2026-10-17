@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.frontend.ContainerMetrics;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -65,6 +66,8 @@ public class RestRequestMetricsTracker {
   private ResponseStatus responseStatus = ResponseStatus.Ok;
 
   private long bytesTransferred = 0;
+  private int finalResponseStatusCode;
+  private long responseTimeToFirstByteInMs = -1;
 
   private enum RequestTerminationReason {
     NONE,
@@ -86,6 +89,8 @@ public class RestRequestMetricsTracker {
     private long requestReceivedTime = 0;
     private long timeToFirstByteInMs = 0;
     private long roundTripTimeInMs = 0;
+    private volatile long requestReceivedTimeInNanos;
+    private volatile boolean requestReceived;
 
     /**
      * Adds to the time taken to process the request at the NIO layer.
@@ -112,6 +117,8 @@ public class RestRequestMetricsTracker {
      */
     public void markRequestReceived() {
       requestReceivedTime = System.currentTimeMillis();
+      requestReceivedTimeInNanos = System.nanoTime();
+      requestReceived = true;
     }
 
     /**
@@ -300,6 +307,41 @@ public class RestRequestMetricsTracker {
   }
 
   /**
+   * Captures the final header-write submission before a write listener can complete inline.
+   * Interim responses do not claim the final observation.
+   */
+  synchronized void markResponseHeaders(int statusCode) {
+    if (!metricsRecorded.get() && statusCode >= 200 && finalResponseStatusCode == 0) {
+      finalResponseStatusCode = statusCode;
+      if (nioMetricsTracker.requestReceived) {
+        long elapsed = System.nanoTime() - nioMetricsTracker.requestReceivedTimeInNanos;
+        responseTimeToFirstByteInMs = elapsed < 0 ? -1 : TimeUnit.NANOSECONDS.toMillis(elapsed);
+      }
+    }
+  }
+
+  private synchronized void recordResponseMetrics() {
+    boolean success = finalResponseStatusCode >= 200 && finalResponseStatusCode < 300
+        || finalResponseStatusCode == 304;
+    boolean clientError = finalResponseStatusCode >= 400 && finalResponseStatusCode < 500;
+    boolean serverFailure = finalResponseStatusCode >= 500 && finalResponseStatusCode < 600;
+    if (success || clientError || serverFailure) {
+      if (responseTimeToFirstByteInMs < 0) {
+        metrics.responseTtfbMissingCount.inc();
+      } else if (success) {
+        metrics.successfulResponseNioTimeToFirstByteInMs.update(responseTimeToFirstByteInMs);
+        metrics.successfulResponseTtfbSampleRate.mark();
+      } else if (clientError) {
+        metrics.clientErrorResponseNioTimeToFirstByteInMs.update(responseTimeToFirstByteInMs);
+        metrics.clientErrorResponseTtfbSampleRate.mark();
+      } else {
+        metrics.serverErrorResponseNioTimeToFirstByteInMs.update(responseTimeToFirstByteInMs);
+        metrics.serverErrorResponseTtfbSampleRate.mark();
+      }
+    }
+  }
+
+  /**
    * Records the metrics.
    * </p>
    * This method is expected to called when the {@link RestRequest}, that this instance of {@link RestRequestMetricsTracker} is
@@ -314,6 +356,7 @@ public class RestRequestMetricsTracker {
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
         metrics.nioTimeToFirstByteInMs.update(nioMetricsTracker.timeToFirstByteInMs);
+        recordResponseMetrics();
 
         metrics.scRequestProcessingTimeInMs.update(scalingMetricsTracker.requestProcessingTimeInMs.get());
         metrics.scRequestProcessingWaitTimeInMs.update(scalingMetricsTracker.requestProcessingWaitTimeInMs.get());

@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.frontend.ContainerMetrics;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Random;
 import org.junit.Test;
@@ -27,6 +28,85 @@ import static org.junit.Assert.*;
  * Unit tests for {@link RestRequestMetricsTracker}.
  */
 public class RestRequestMetricsTrackerTest {
+
+  @Test
+  public void testResponseTtfbValidatesTiming() throws Exception {
+    for (String scenario : new String[]{"zero", "invalid", "missing-start"}) {
+      RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Duration", new MetricRegistry());
+      RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+      tracker.injectMetrics(metrics);
+      if (!scenario.equals("missing-start")) {
+        tracker.nioMetricsTracker.markRequestReceived();
+      }
+      tracker.markResponseHeaders(200);
+      if (!scenario.equals("missing-start")) {
+        Field firstByteDuration = RestRequestMetricsTracker.class.getDeclaredField("responseTimeToFirstByteInMs");
+        firstByteDuration.setAccessible(true);
+        firstByteDuration.setLong(tracker, scenario.equals("zero") ? 0 : -1);
+      }
+      tracker.recordMetrics();
+      boolean valid = scenario.equals("zero");
+      assertEquals(scenario, valid ? 1 : 0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+      assertEquals(scenario, valid ? 1 : 0, metrics.successfulResponseTtfbSampleRate.getCount());
+      assertEquals(scenario, valid ? 0 : 1, metrics.responseTtfbMissingCount.getCount());
+      assertEquals(1, metrics.nioTimeToFirstByteInMs.getCount());
+      assertEquals(0, metrics.nioTimeToFirstByteInMs.getSnapshot().getMax());
+      if (valid) {
+        assertArrayEquals(new long[]{0}, metrics.successfulResponseNioTimeToFirstByteInMs.getSnapshot().getValues());
+      }
+    }
+  }
+
+  @Test
+  public void testResponseTtfbDoesNotTreatUnsetHeadersAsSuccess() {
+    RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Unset", new MetricRegistry());
+    RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+    tracker.injectMetrics(metrics);
+    tracker.nioMetricsTracker.markRequestReceived();
+    tracker.recordMetrics();
+    assertEquals(0, metrics.successfulResponseNioTimeToFirstByteInMs.getCount());
+    assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
+    assertEquals(1, metrics.operationCount.getCount());
+    tracker.markResponseHeaders(200);
+    tracker.recordMetrics();
+    assertEquals(0, metrics.successfulResponseTtfbSampleRate.getCount());
+  }
+
+  @Test
+  public void testResponseTtfbUsesFinalHeadersAndPreservesErrorCounts() {
+    int[] statusCodes = {200, 206, 304, 400, 404, 429, 500, 503, 507, 301};
+    String[] populations = {"Successful", "Successful", "Successful", "ClientError", "ClientError", "ClientError",
+        "ServerError", "ServerError", "ServerError", ""};
+    for (int i = 0; i < statusCodes.length; i++) {
+      MetricRegistry registry = new MetricRegistry();
+      RestRequestMetrics metrics = new RestRequestMetrics(getClass(), "Final", registry);
+      RestRequestMetricsTracker tracker = new RestRequestMetricsTracker();
+      tracker.injectMetrics(metrics);
+      tracker.nioMetricsTracker.markRequestReceived();
+      tracker.markResponseHeaders(100);
+      tracker.markResponseHeaders(statusCodes[i]);
+      tracker.markResponseHeaders(500);
+      tracker.markUnsatisfied();
+      tracker.markFailure();
+      tracker.setResponseStatus(ResponseStatus.InternalServerError);
+      tracker.markServerError();
+      tracker.recordMetrics();
+      for (String population : new String[]{"Successful", "ClientError", "ServerError"}) {
+        String prefix = getClass().getName() + ".Final" + population;
+        long count = population.equals(populations[i]) ? 1 : 0;
+        assertEquals(statusCodes[i] + " " + population, count,
+            registry.getHistograms().get(prefix + "ResponseNioTimeToFirstByteInMs").getCount());
+        assertEquals(count, registry.getMeters().get(prefix + "ResponseTtfbSampleRate").getCount());
+      }
+      assertEquals(1, metrics.unsatisfiedRequestCount.getCount());
+      assertEquals(1, metrics.operationError.getCount());
+      assertEquals(1, metrics.serverErrorCount.getCount());
+      assertEquals(1, metrics.operationRate.getCount());
+      tracker.markResponseHeaders(404);
+      tracker.recordMetrics();
+      assertEquals(1, metrics.operationCount.getCount());
+    }
+  }
 
   @Test
   public void testNotFoundCountUsesRecordedStatus() {
