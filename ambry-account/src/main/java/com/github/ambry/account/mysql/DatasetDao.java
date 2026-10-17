@@ -1850,7 +1850,24 @@ public class DatasetDao {
             "Dataset expired for account: " + accountId + " container: " + containerId + " dataset: " + datasetName,
             AccountServiceErrorCode.Deleted);
       }
-      versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
+      int versionSchemaOrdinal;
+      try {
+        versionSchemaOrdinal = resultSet.getInt(VERSION_SCHEMA);
+      } catch (NullPointerException e) {
+        // mysql-connector-java 8.0.21 (see gradle/dependency-versions.gradle) can throw NPE
+        // from ResultSetImpl.findColumn -> getInt when the row state is unexpected. Observed
+        // in prod 2026-04-29 on /named/<account>/<container>/<dataset>, where
+        // it surfaced as HTTP 500 instead of 404. No fix is called out in the 8.0.x release
+        // notes; revisit when bumping the connector. This path is MySQL-only -- Ambry's
+        // dataset metadata does not run against TiDB. Map to NotFound so the frontend
+        // translates it to 404; the dedicated metric below is the on-call signal (the
+        // existing AccountAndContainerInjector error log already names the dataset).
+        metrics.datasetRowReadNpeCount.inc();
+        throw new AccountServiceException(
+            "Dataset row could not be read for account: " + accountId + " container: " + containerId + " dataset: "
+                + datasetName, AccountServiceErrorCode.NotFound);
+      }
+      versionSchema = Dataset.VersionSchema.values()[versionSchemaOrdinal];
       retentionPolicy = resultSet.getObject(RETENTION_POLICY, String.class);
       retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
       retentionTimeInSeconds = resultSet.getObject(RETENTION_TIME_IN_SECONDS, Long.class);
@@ -1914,7 +1931,18 @@ public class DatasetDao {
             "Version Schema not found for account: " + accountId + " container: " + containerId + " dataset: "
                 + datasetName, AccountServiceErrorCode.NotFound);
       }
-      versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
+      int versionSchemaOrdinal;
+      try {
+        versionSchemaOrdinal = resultSet.getInt(VERSION_SCHEMA);
+      } catch (NullPointerException e) {
+        // Same JDBC driver bug as executeGetDatasetStatement -- see comment there for details.
+        // Not observed on this path in prod, but the call shape is identical so guard symmetrically.
+        metrics.datasetRowReadNpeCount.inc();
+        throw new AccountServiceException(
+            "Version Schema row could not be read for account: " + accountId + " container: " + containerId
+                + " dataset: " + datasetName, AccountServiceErrorCode.NotFound);
+      }
+      versionSchema = Dataset.VersionSchema.values()[versionSchemaOrdinal];
     } finally {
       //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
       closeQuietly(resultSet);
