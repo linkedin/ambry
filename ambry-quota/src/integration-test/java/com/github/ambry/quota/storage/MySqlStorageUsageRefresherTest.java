@@ -104,9 +104,12 @@ public class MySqlStorageUsageRefresherTest {
     Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
     manager.persistentBackupFile("2020-01", containerStorageUsages);
     assertEquals(manager.getBackupFiles().size(), 1);
-    // persist same file again
-    manager.persistentBackupFile("2020-01", containerStorageUsages);
+    // A recovered snapshot replaces the backup for the same month.
+    Map<String, Map<String, Long>> updatedContainerStorageUsages = cloneMap(containerStorageUsages);
+    updatedContainerStorageUsages.get("1").put("1", updatedContainerStorageUsages.get("1").get("1") + 1);
+    manager.persistentBackupFile("2020-01", updatedContainerStorageUsages);
     assertEquals(manager.getBackupFiles().size(), 1);
+    assertEquals(updatedContainerStorageUsages, manager.getBackupFileContent("2020-01"));
     try {
       manager.persistentBackupFile("badfilename", containerStorageUsages);
       fail("should fail due to bad filename");
@@ -127,7 +130,7 @@ public class MySqlStorageUsageRefresherTest {
     Files.createFile(tmpFilePath);
     manager = new MySqlStorageUsageRefresher.BackupFileManager(localBackupFilePath.toString());
     assertEquals(manager.getBackupFiles().size(), 2);
-    assertEquals(containerStorageUsages, manager.getBackupFileContent("2020-01"));
+    assertEquals(updatedContainerStorageUsages, manager.getBackupFileContent("2020-01"));
     assertFalse(Files.exists(tmpFilePath));
   }
 
@@ -164,15 +167,21 @@ public class MySqlStorageUsageRefresherTest {
         MySqlStorageUsageRefresher.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false),
         backupContainerStorageUsages);
 
-    // recreate a refresher, but change the monthly container usages, new refresher should load it from backup
+    // Recreate a refresher after the monthly snapshot changes. The old backup is provisional and must not mask the
+    // newer committed snapshot version.
     aggregatedAccountStorageStats = new AggregatedAccountStorageStats(
         StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 0, 10, 10, 10000L, 2, 10));
     accountStatsMySqlStore.storeAggregatedAccountStorageStats(aggregatedAccountStorageStats);
     accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(
         MySqlStorageUsageRefresher.getCurrentMonth());
     refresher = new MySqlStorageUsageRefresher(newAccountStatsMysqlStore, scheduler, storageQuotaConfig, metrics);
+    refresher.fetchStorageUsageMonthlyBase();
     Map<String, Map<String, Long>> currentMonthlyStorageUsages = refresher.getContainerStorageUsageMonthlyBase();
-    assertEquals(backupContainerStorageUsages, currentMonthlyStorageUsages);
+    Map<String, Map<String, Long>> expectedMonthlyStorageUsages =
+        MySqlStorageUsageRefresher.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false);
+    assertEquals(expectedMonthlyStorageUsages, currentMonthlyStorageUsages);
+    assertEquals(expectedMonthlyStorageUsages,
+        refresher.getBackupFileManager().getBackupFileContent(MySqlStorageUsageRefresher.getCurrentMonth()));
   }
 
   /**
@@ -291,6 +300,18 @@ public class MySqlStorageUsageRefresherTest {
           MySqlStorageUsageRefresher.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false),
           refresher.getContainerStorageUsageMonthlyBase());
 
+      // Replace the current month's snapshot and verify the version change refreshes both memory and the backup.
+      AggregatedAccountStorageStats recoveredAggregatedAccountStorageStats = new AggregatedAccountStorageStats(
+          StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 0, 10, 10, 10000L, 2, 10));
+      accountStatsMySqlStore.storeAggregatedAccountStorageStats(recoveredAggregatedAccountStorageStats);
+      accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonth);
+      refresher.fetchStorageUsageMonthlyBase();
+      Map<String, Map<String, Long>> recoveredStorageUsage =
+          MySqlStorageUsageRefresher.convertAggregatedAccountStorageStatsToMap(recoveredAggregatedAccountStorageStats,
+              false);
+      assertEquals(recoveredStorageUsage, refresher.getContainerStorageUsageMonthlyBase());
+      assertEquals(recoveredStorageUsage, refresher.getBackupFileManager().getBackupFileContent(currentMonth));
+
       // Change the month
       String notCurrentMonth = "1970-01";
       AggregatedAccountStorageStats newAggregatedAccountStorageStats = new AggregatedAccountStorageStats(
@@ -299,9 +320,7 @@ public class MySqlStorageUsageRefresherTest {
       accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(notCurrentMonth);
       refresher.fetchStorageUsageMonthlyBase();
       // Monthly storage usage still the old one
-      assertEquals(
-          MySqlStorageUsageRefresher.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false),
-          refresher.getContainerStorageUsageMonthlyBase());
+      assertEquals(recoveredStorageUsage, refresher.getContainerStorageUsageMonthlyBase());
 
       // Change the month back to the current month
       accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonth);

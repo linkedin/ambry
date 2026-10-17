@@ -15,7 +15,9 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.google.common.annotations.VisibleForTesting;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.accountstats.AggregatedAccountReportsState;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.StatsReportType;
@@ -28,11 +30,16 @@ import com.github.ambry.utils.Time;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import org.apache.helix.HelixManager;
+import org.apache.helix.model.IdealState;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskResult;
 import org.apache.helix.task.UserContentStore;
@@ -47,6 +54,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
   public static final String TASK_COMMAND_PREFIX = "mysql_aggregate";
   public static final ZoneOffset ZONE_OFFSET = ZoneId.systemDefault().getRules().getOffset(LocalDateTime.now());
   public static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
+  private static final int MAX_STATE_UPDATE_ATTEMPTS = 3;
   private static final Logger logger = LoggerFactory.getLogger(MySqlReportAggregatorTask.class);
   private final MySqlClusterAggregator clusterAggregator;
   private final HelixManager manager;
@@ -96,6 +104,13 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
   MySqlReportAggregatorTask(HelixManager manager, long relevantTimePeriodInMs, StatsReportType statsReportType,
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback,
       ClusterMapConfig clusterMapConfig, MetricRegistry registry) {
+    this(manager, relevantTimePeriodInMs, statsReportType, accountStatsStore, callback, clusterMapConfig, registry,
+        SystemTime.getInstance());
+  }
+
+  MySqlReportAggregatorTask(HelixManager manager, long relevantTimePeriodInMs, StatsReportType statsReportType,
+      AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback,
+      ClusterMapConfig clusterMapConfig, MetricRegistry registry, Time time) {
     this.manager = manager;
     clusterAggregator = new MySqlClusterAggregator(relevantTimePeriodInMs);
     this.statsReportType = statsReportType;
@@ -103,7 +118,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     this.callback = callback;
     this.clusterMapConfig = clusterMapConfig;
     this.metrics = new Metrics(registry);
-    this.time = SystemTime.getInstance();
+    this.time = time;
   }
 
   @Override
@@ -117,16 +132,48 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     long startTimeMs = System.currentTimeMillis();
     AggregatedAccountStorageStats aggregatedAccountStorageStats = null;
     try {
+      AggregatedAccountReportsState aggregationState = null;
+      Exception aggregationStateQueryFailure = null;
+      if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
+          && statsReportType == StatsReportType.ACCOUNT_REPORT) {
+        try {
+          aggregationState = accountStatsStore.queryAggregatedAccountReportsState();
+        } catch (Exception e) {
+          aggregationStateQueryFailure = e;
+          logger.error("Failed to read monthly aggregation state; continuing current aggregation", e);
+        }
+      }
       List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
+      boolean recoveryAggregateReady = false;
       if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
         logger.info("Aggregating stats from " + instanceNames.size() + " hosts");
+        MySqlClusterAggregator.AccountStatsAggregationResult aggregationResult =
+            clusterAggregator.aggregateHostAccountStorageStatsWrappersWithPartitionIds(
+                new AccountStorageStatsIterator(instanceNames, accountStatsStore, clusterMapConfig));
         Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> results =
-            clusterAggregator.aggregateHostAccountStorageStatsWrappers(new AccountStorageStatsIterator(instanceNames, accountStatsStore, clusterMapConfig));
+            aggregationResult.getAggregatedStats();
         if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
           removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
         }
         accountStatsStore.storeAggregatedAccountStorageStats(results.getSecond());
         aggregatedAccountStorageStats = results.getFirst();
+        if (aggregationState != null && aggregationState.getLastAggregationTimeMs() != null
+            && aggregationState.getMonthlyBaselineRecoveryMonth() != null) {
+          MySqlClusterAggregator.AccountStatsAggregationResult recoveryResult =
+              clusterAggregator.aggregateHostAccountStorageStatsWrappersWithPartitionIds(
+                  new AccountStorageStatsIterator(instanceNames, accountStatsStore, clusterMapConfig,
+                      aggregationState.getLastAggregationTimeMs()));
+          Set<Long> expectedPartitionIds = getExpectedPartitionIds();
+          recoveryAggregateReady = !expectedPartitionIds.isEmpty()
+              && recoveryResult.getSelectedPartitionIds().containsAll(expectedPartitionIds);
+          if (recoveryAggregateReady) {
+            AggregatedAccountStorageStats recoveredStats = recoveryResult.getAggregatedStats().getSecond();
+            if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+              removeInvalidAggregatedAccountAndContainerStats(recoveredStats);
+            }
+            accountStatsStore.storeAggregatedAccountStorageStats(recoveredStats);
+          }
+        }
       } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
         logger.info("Aggregating stats from " + instanceNames.size() + " hosts");
         Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> results =
@@ -141,18 +188,10 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       // Check if there is a base report for this month or not.
       if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
           && statsReportType == StatsReportType.ACCOUNT_REPORT) {
-        // Get the month, if not the same month, then copy the aggregated stats and update the month
-        String currentMonthValue =
-            LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET).format(TIMESTAMP_FORMATTER);
-        String recordedMonthValue = accountStatsStore.queryRecordedMonth();
-        if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
-            recordedMonthValue)) {
-          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
-            accountStatsStore.deleteSnapshotOfAggregatedAccountStats();
-          }
-          logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
-          accountStatsStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonthValue);
+        if (aggregationStateQueryFailure != null) {
+          throw aggregationStateQueryFailure;
         }
+        updateMonthlySnapshot(aggregationState, recoveryAggregateReady);
       }
       aggregationTimeMs.update(System.currentTimeMillis() - startTimeMs);
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
@@ -166,6 +205,95 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         callback.onCompletion(aggregatedAccountStorageStats, exception);
       }
     }
+  }
+
+  private Set<Long> getExpectedPartitionIds() {
+    Set<Long> expectedPartitionIds = new HashSet<>();
+    for (String resourceName : manager.getClusterManagmentTool().getResourcesInCluster(manager.getClusterName())) {
+      IdealState idealState =
+          manager.getClusterManagmentTool().getResourceIdealState(manager.getClusterName(), resourceName);
+      if (idealState == null) {
+        continue;
+      }
+      for (String partitionName : idealState.getPartitionSet()) {
+        if (!partitionName.isEmpty() && partitionName.chars().allMatch(Character::isDigit)) {
+          expectedPartitionIds.add(Long.parseLong(partitionName));
+        }
+      }
+    }
+    return expectedPartitionIds;
+  }
+
+  @VisibleForTesting
+  void updateMonthlySnapshot(AggregatedAccountReportsState aggregationState) throws Exception {
+    updateMonthlySnapshot(aggregationState, true);
+  }
+
+  @VisibleForTesting
+  void updateMonthlySnapshot(AggregatedAccountReportsState aggregationState, boolean recoveryAggregateReady)
+      throws Exception {
+    long aggregationTimeMs = time.milliseconds();
+    LocalDateTime currentDateTime = LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET);
+    String currentMonthValue = currentDateTime.format(TIMESTAMP_FORMATTER);
+    long currentMonthStartTimeMs =
+        YearMonth.from(currentDateTime).atDay(1).atStartOfDay().toInstant(ZONE_OFFSET).toEpochMilli();
+    long recoveryGapMs = TimeUnit.HOURS.toMillis(clusterMapConfig.clustermapMonthlyAccountReportRecoveryGapHours);
+
+    for (int attempt = 0; attempt < MAX_STATE_UPDATE_ATTEMPTS; attempt++) {
+      Long lastAggregationTimeMs = aggregationState.getLastAggregationTimeMs();
+      if (lastAggregationTimeMs != null && lastAggregationTimeMs > aggregationTimeMs) {
+        logger.info("Skipping stale aggregation state update at {} because a newer aggregation completed at {}",
+            aggregationTimeMs, lastAggregationTimeMs);
+        return;
+      }
+
+      String recordedMonthValue = aggregationState.getMonth();
+      boolean monthChanged =
+          recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(recordedMonthValue);
+      boolean recoveryPending = currentMonthValue.equals(aggregationState.getMonthlyBaselineRecoveryMonth());
+      if (recoveryPending && !recoveryAggregateReady) {
+        logger.info("Keeping monthly snapshot recovery pending for month {} until completed post-gap reports cover "
+            + "the current aggregate", currentMonthValue);
+        return;
+      }
+      boolean gapCrossedMonthBoundary =
+          lastAggregationTimeMs != null && lastAggregationTimeMs < currentMonthStartTimeMs
+              && aggregationTimeMs >= lastAggregationTimeMs
+              && aggregationTimeMs - lastAggregationTimeMs >= recoveryGapMs;
+      boolean takeSnapshot = false;
+      String nextRecoveryMonth = null;
+      String action = null;
+      if (monthChanged) {
+        if (recoveryPending) {
+          takeSnapshot = true;
+          action = "Committed deferred recovery snapshot";
+        } else if (gapCrossedMonthBoundary) {
+          nextRecoveryMonth = currentMonthValue;
+          action = "Deferred monthly snapshot until completed post-gap reports cover the current aggregate";
+        } else {
+          takeSnapshot = true;
+          action = "Committed monthly snapshot";
+        }
+      } else if (recoveryPending) {
+        takeSnapshot = true;
+        action = "Refreshed monthly snapshot after recovery";
+      } else if (gapCrossedMonthBoundary) {
+        // During a rolling deployment, an older aggregator can advance the month without recording recovery state.
+        nextRecoveryMonth = currentMonthValue;
+        action = "Deferred recovery snapshot after detecting a legacy month rollover";
+      }
+
+      if (accountStatsStore.updateAggregatedAccountReportsState(aggregationState, currentMonthValue,
+          aggregationTimeMs, nextRecoveryMonth, takeSnapshot,
+          clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask)) {
+        if (action != null) {
+          logger.info("{} for month {}", action, currentMonthValue);
+        }
+        return;
+      }
+      aggregationState = accountStatsStore.queryAggregatedAccountReportsState();
+    }
+    throw new IllegalStateException("Failed to update monthly aggregation state due to concurrent changes");
   }
 
   private void removeInvalidAggregatedAccountAndContainerStats(AggregatedAccountStorageStats currentStats)
