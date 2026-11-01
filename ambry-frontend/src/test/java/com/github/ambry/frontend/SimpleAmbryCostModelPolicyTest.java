@@ -112,7 +112,47 @@ public class SimpleAmbryCostModelPolicyTest {
     costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 10240);
 
-    // TODO add a range request case with large range
+    // test for a GET request with null blob info (e.g. deleted blob)
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, null);
+    verifyReadCost(costMap, 1);
+
+    // test GET_SIGNED_URL request
+    blobInfo = getBlobInfo(40 * GB);
+    restRequest = createMockRequestWithMethod(RestMethod.GET, "/" + Operations.GET_SIGNED_URL + blobUri, -1);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyReadCost(costMap, 1);
+
+    // test for a range GET request with small range (1 CU)
+    blobInfo = getBlobInfo(40 * GB);
+    Map<String, Object> rangeArgs = java.util.Collections.singletonMap(com.github.ambry.rest.RestUtils.Headers.RANGE, "bytes=0-1048575");
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1, rangeArgs);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyReadCost(costMap, 1);
+
+    // test for a range GET request with large range (2 CU for 8 MB range)
+    rangeArgs = java.util.Collections.singletonMap(com.github.ambry.rest.RestUtils.Headers.RANGE, "bytes=0-" + (8 * MB - 1));
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1, rangeArgs);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyReadCost(costMap, 2);
+
+    // test for an invalid range GET request (fallback to 1 CU)
+    rangeArgs = java.util.Collections.singletonMap(com.github.ambry.rest.RestUtils.Headers.RANGE, "invalid-range");
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1, rangeArgs);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyReadCost(costMap, 1);
+
+    // test for a STITCH POST request (2 CU for 8 MB blob)
+    blobInfo = getBlobInfo(0);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, "/" + Operations.STITCH, 0);
+    when(restResponseChannel.getHeader(com.github.ambry.rest.RestUtils.Headers.BLOB_SIZE)).thenReturn(String.valueOf(8 * MB));
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyWriteCost(costMap, 2, 0.0);
+
+    // test for a large STITCH POST request (1024 CU for 4 GB blob)
+    when(restResponseChannel.getHeader(com.github.ambry.rest.RestUtils.Headers.BLOB_SIZE)).thenReturn(String.valueOf(4 * GB));
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyWriteCost(costMap, 1024, 0.0);
   }
 
   /**
