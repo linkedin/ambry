@@ -118,6 +118,10 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertEquals(hostStats1.getStats().getStorageStats(), obtainedHostStats1.getStats().getStorageStats());
     assertEquals(hostStats2.getStats().getStorageStats(), obtainedHostStats2.getStats().getStorageStats());
     assertEquals(hostStats3.getStats().getStorageStats(), obtainedHostStats3.getStats().getStorageStats());
+    assertNotNull(mySqlStore1.queryHostAccountStorageStatsByHostForRecovery(hostname1, port1,
+        hostStats1.getHeader().getTimestamp()));
+    assertNull(mySqlStore1.queryHostAccountStorageStatsByHostForRecovery(hostname1, port1,
+        hostStats1.getHeader().getTimestamp() + 1));
 
     mySqlStore1.shutdown();
     mySqlStore2.shutdown();
@@ -152,6 +156,24 @@ public class AccountStatsMySqlStoreIntegrationTest {
     // empty stats should remove all the data in the database
     obtainedStats = mySqlStore.queryHostAccountStorageStatsByHost(hostname1, port1);
     assertFalse(obtainedStats.getStats().getStorageStats().containsKey((long) 0));
+  }
+
+  @Test
+  public void testRecoveryQueryPreservesReportedEmptyPartitions() throws Exception {
+    long reportTimestampMs = System.currentTimeMillis();
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> partitionStats = new HashMap<>();
+    partitionStats.put(1L, Collections.emptyMap());
+    HostAccountStorageStatsWrapper statsWrapper = new HostAccountStorageStatsWrapper(
+        new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, reportTimestampMs, 1, 1,
+            Collections.emptyList()), new HostAccountStorageStats(partitionStats));
+
+    mySqlStore.storeHostAccountStorageStats(statsWrapper);
+
+    assertTrue(mySqlStore.queryHostAccountStorageStatsByHost(hostname1, port1).getStats().getStorageStats().isEmpty());
+    assertTrue(mySqlStore.queryHostAccountStorageStatsByHostForRecovery(hostname1, port1, reportTimestampMs)
+        .getStats()
+        .getStorageStats()
+        .containsKey(1L));
   }
 
   @Test
@@ -434,9 +456,12 @@ public class AccountStatsMySqlStoreIntegrationTest {
     // fetch the month and it should return empty string
     Assert.assertEquals("", mySqlStore.queryRecordedMonth());
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
-    AggregatedAccountStorageStats monthlyAggregatedAccountStorageStats =
-        mySqlStore.queryMonthlyAggregatedAccountStorageStats();
+    Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState> monthlySnapshot =
+        mySqlStore.queryMonthlyAggregatedAccountStorageStatsAndState();
+    AggregatedAccountStorageStats monthlyAggregatedAccountStorageStats = monthlySnapshot.getFirst();
     assertEquals(currentAggregatedStats.getStorageStats(), monthlyAggregatedAccountStorageStats.getStorageStats());
+    assertEquals(monthValue, monthlySnapshot.getSecond().getMonth());
+    assertEquals(1, monthlySnapshot.getSecond().getSnapshotVersion());
     String obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 
@@ -446,8 +471,11 @@ public class AccountStatsMySqlStoreIntegrationTest {
         StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 0, 10, 10, 10000L, 2, 10));
     mySqlStore.storeAggregatedAccountStorageStats(currentAggregatedStats);
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
-    monthlyAggregatedAccountStorageStats = mySqlStore.queryMonthlyAggregatedAccountStorageStats();
+    monthlySnapshot = mySqlStore.queryMonthlyAggregatedAccountStorageStatsAndState();
+    monthlyAggregatedAccountStorageStats = monthlySnapshot.getFirst();
     assertEquals(currentAggregatedStats.getStorageStats(), monthlyAggregatedAccountStorageStats.getStorageStats());
+    assertEquals(monthValue, monthlySnapshot.getSecond().getMonth());
+    assertEquals(2, monthlySnapshot.getSecond().getSnapshotVersion());
     obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 

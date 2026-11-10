@@ -276,4 +276,95 @@ public class AggregatedAccountReportsDaoTest {
     assertEquals("Read failure count should be " + (readFailureCountBefore + 1), readFailureCountBefore + 1,
         metrics.readFailureCount.getCount());
   }
+
+  @Test
+  public void testSnapshotTransactionRollsBackAndPreservesOriginalFailure() throws Exception {
+    Connection connection = mock(Connection.class);
+    PreparedStatement deleteStatement = mock(PreparedStatement.class);
+    PreparedStatement copyStatement = mock(PreparedStatement.class);
+    PreparedStatement queryStateStatement = mock(PreparedStatement.class);
+    PreparedStatement stateStatement = mock(PreparedStatement.class);
+    ResultSet emptyStateResult = mock(ResultSet.class);
+    DataSource dataSource = getDataSource(connection);
+    SQLException stateFailure = new SQLException("state update failed");
+    SQLException rollbackFailure = new SQLException("rollback failed");
+    SQLException restoreFailure = new SQLException("restore failed");
+    when(connection.getAutoCommit()).thenReturn(true);
+    when(queryStateStatement.executeQuery()).thenReturn(emptyStateResult);
+    when(emptyStateResult.next()).thenReturn(false);
+    when(connection.prepareStatement(startsWith("SELECT "))).thenReturn(queryStateStatement);
+    when(connection.prepareStatement(startsWith("DELETE FROM " + AggregatedAccountReportsDao
+        .MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE))).thenReturn(deleteStatement);
+    when(connection.prepareStatement(startsWith("INSERT " + AggregatedAccountReportsDao
+        .MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE + " SELECT"))).thenReturn(copyStatement);
+    when(connection.prepareStatement(startsWith("INSERT INTO " + AggregatedAccountReportsDao
+        .AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE))).thenReturn(stateStatement);
+    when(stateStatement.executeUpdate()).thenThrow(stateFailure);
+    doThrow(rollbackFailure).when(connection).rollback();
+    doThrow(restoreFailure).when(connection).setAutoCommit(true);
+    AggregatedAccountReportsDao dao = new AggregatedAccountReportsDao(dataSource, metrics);
+
+    try {
+      dao.updateAggregationStateForCluster(new AggregatedAccountReportsState("", null, null, 0), clusterName,
+          "2026-09", 1000, null, true, true);
+      fail("Expected snapshot transaction to fail");
+    } catch (SQLException e) {
+      assertSame(stateFailure, e);
+      assertArrayEquals(new Throwable[]{rollbackFailure, restoreFailure}, e.getSuppressed());
+    }
+
+    verify(connection).setAutoCommit(false);
+    verify(connection).rollback();
+    verify(connection, never()).commit();
+  }
+
+  @Test
+  public void testSnapshotTransactionCommitsBeforeRestoringAutoCommit() throws Exception {
+    Connection connection = mock(Connection.class);
+    PreparedStatement copyStatement = mock(PreparedStatement.class);
+    PreparedStatement queryStateStatement = mock(PreparedStatement.class);
+    PreparedStatement stateStatement = mock(PreparedStatement.class);
+    ResultSet emptyStateResult = mock(ResultSet.class);
+    when(connection.getAutoCommit()).thenReturn(true);
+    when(queryStateStatement.executeQuery()).thenReturn(emptyStateResult);
+    when(emptyStateResult.next()).thenReturn(false);
+    when(connection.prepareStatement(startsWith("SELECT "))).thenReturn(queryStateStatement);
+    when(connection.prepareStatement(startsWith("INSERT " + AggregatedAccountReportsDao
+        .MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE + " SELECT"))).thenReturn(copyStatement);
+    when(connection.prepareStatement(startsWith("INSERT INTO " + AggregatedAccountReportsDao
+        .AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE))).thenReturn(stateStatement);
+    AggregatedAccountReportsDao dao = new AggregatedAccountReportsDao(getDataSource(connection), metrics);
+
+    assertTrue(dao.updateAggregationStateForCluster(new AggregatedAccountReportsState("", null, null, 0), clusterName,
+        "2026-09", 1000, null, true, false));
+
+    verify(connection).setAutoCommit(false);
+    verify(connection).commit();
+    verify(connection).setAutoCommit(true);
+    verify(connection, never()).rollback();
+  }
+
+  @Test
+  public void testStaleExpectedStateDoesNotUpdateSnapshot() throws Exception {
+    Connection connection = mock(Connection.class);
+    PreparedStatement queryStateStatement = mock(PreparedStatement.class);
+    ResultSet currentStateResult = mock(ResultSet.class);
+    when(connection.getAutoCommit()).thenReturn(true);
+    when(connection.prepareStatement(startsWith("SELECT "))).thenReturn(queryStateStatement);
+    when(queryStateStatement.executeQuery()).thenReturn(currentStateResult);
+    when(currentStateResult.next()).thenReturn(true);
+    when(currentStateResult.getString(AggregatedAccountReportsDao.MONTH_COLUMN)).thenReturn("2026-09");
+    when(currentStateResult.getLong("lastAggregationTimeMs")).thenReturn(2000L);
+    when(currentStateResult.getString("monthlyBaselineRecoveryMonth")).thenReturn(null);
+    when(currentStateResult.getLong("snapshotVersion")).thenReturn(2L);
+    AggregatedAccountReportsDao dao = new AggregatedAccountReportsDao(getDataSource(connection), metrics);
+
+    boolean updated =
+        dao.updateAggregationStateForCluster(new AggregatedAccountReportsState("2026-08", 1000L, null, 1),
+            clusterName, "2026-09", 3000, "2026-09", false, false);
+
+    assertFalse(updated);
+    verify(connection).commit();
+    verify(connection, times(1)).prepareStatement(anyString());
+  }
 }

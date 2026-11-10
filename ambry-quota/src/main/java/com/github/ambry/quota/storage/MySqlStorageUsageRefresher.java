@@ -16,11 +16,13 @@ package com.github.ambry.quota.storage;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.accountstats.AggregatedAccountReportsState;
 import com.github.ambry.clustermap.MySqlReportAggregatorTask;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.JsonUtil;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.File;
@@ -33,6 +35,7 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.Month;
@@ -87,6 +90,10 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   private final BackupFileManager backupFileManager;
 
   private volatile Map<String, Map<String, Long>> containerStorageUsageMonthlyBase;
+  private volatile String monthlyBaseMonth;
+  private volatile long monthlyBaseVersion = -1;
+  private volatile String persistedMonthlyBaseMonth;
+  private volatile long persistedMonthlyBaseVersion = -1;
   private volatile int retries = 0;
   private volatile String currentMonth = getCurrentMonth();
 
@@ -135,6 +142,9 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       if (backupFileManager != null) {
         logger.info("Fetching monthly base from backup directory for this month: {}", currentMonth);
         containerStorageUsageMonthlyBase = backupFileManager.getBackupFileContent(currentMonth);
+        if (containerStorageUsageMonthlyBase != null) {
+          monthlyBaseMonth = currentMonth;
+        }
       }
     } catch (IOException e) {
       logger.error("Failed to get container monthly usage for {} from backup", currentMonth, e);
@@ -144,15 +154,19 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       try {
         // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
         logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
+        Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState> monthlySnapshot =
+            accountStatsStore.queryMonthlyAggregatedAccountStorageStatsAndState();
         containerStorageUsageMonthlyBase =
-            convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryMonthlyAggregatedAccountStorageStats(),
-                config.usePhysicalStorage);
+            convertAggregatedAccountStorageStatsToMap(monthlySnapshot.getFirst(), config.usePhysicalStorage);
+        AggregatedAccountReportsState state = monthlySnapshot.getSecond();
         // If the monthly base is indeed for this month, then try to persist it in the backup file.
         // There is a chance that the database has a snapshot from last month since the aggregation task is executed
         // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
         // would have the snapshot of last month.
-        if (currentMonth.equals(accountStatsStore.queryRecordedMonth())) {
-          tryPersistMonthlyUsage();
+        if (currentMonth.equals(state.getMonth())) {
+          monthlyBaseMonth = state.getMonth();
+          monthlyBaseVersion = state.getSnapshotVersion();
+          persistMonthlyUsageIfNeeded();
         }
       } catch (Exception e) {
         throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
@@ -164,14 +178,22 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   /**
    * Try to persist the monthly base usage in the backup file and ignore any exceptions.
    */
-  private void tryPersistMonthlyUsage() {
-    if (backupFileManager != null) {
-      try {
-        backupFileManager.persistentBackupFile(currentMonth, containerStorageUsageMonthlyBase);
-        logger.info("Persisted monthly container usage for {}", currentMonth);
-      } catch (IOException e) {
-        // Error already been logged from backup file manager.
-      }
+  private void persistMonthlyUsageIfNeeded() {
+    if (currentMonth.equals(persistedMonthlyBaseMonth) && monthlyBaseVersion == persistedMonthlyBaseVersion) {
+      return;
+    }
+    if (backupFileManager == null) {
+      persistedMonthlyBaseMonth = currentMonth;
+      persistedMonthlyBaseVersion = monthlyBaseVersion;
+      return;
+    }
+    try {
+      backupFileManager.persistentBackupFile(currentMonth, containerStorageUsageMonthlyBase);
+      persistedMonthlyBaseMonth = currentMonth;
+      persistedMonthlyBaseVersion = monthlyBaseVersion;
+      logger.info("Persisted monthly container usage for {} at version {}", currentMonth, monthlyBaseVersion);
+    } catch (IOException e) {
+      // Error already logged by the backup file manager. A later poll retries this version.
     }
   }
 
@@ -182,15 +204,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   private void fetchMonthlyStorageUsageAndMaybeRetry() {
     boolean shouldRetry = false;
     try {
-      String monthValue = accountStatsStore.queryRecordedMonth();
-      if (monthValue.equals(currentMonth)) {
-        logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}", currentMonth);
-        containerStorageUsageMonthlyBase =
-            convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryMonthlyAggregatedAccountStorageStats(),
-                config.usePhysicalStorage);
-      } else {
-        logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
-            monthValue);
+      if (!refreshMonthlyStorageUsageIfChanged()) {
         shouldRetry = true;
       }
     } catch (Exception e) {
@@ -215,11 +229,43 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       }
     } else {
       retries = 0;
-      tryPersistMonthlyUsage();
       // sleep for two seconds so we can move on to next tick
       sleepFor(2000);
       scheduleStorageUsageMonthlyBaseFetcher();
     }
+  }
+
+  /**
+   * Refresh the monthly base when its committed version changes.
+   * @return {@code true} if MySQL has a monthly base for the current month.
+   * @throws Exception
+   */
+  private synchronized boolean refreshMonthlyStorageUsageIfChanged() throws Exception {
+    AggregatedAccountReportsState state = accountStatsStore.queryAggregatedAccountReportsState();
+    if (!currentMonth.equals(state.getMonth())) {
+      logger.info("Current month [{}] is not the same as month [{}] recorded in mysql database", currentMonth,
+          state.getMonth());
+      return false;
+    }
+    if (containerStorageUsageMonthlyBase != null && currentMonth.equals(monthlyBaseMonth)
+        && monthlyBaseVersion == state.getSnapshotVersion()) {
+      persistMonthlyUsageIfNeeded();
+      return true;
+    }
+
+    Pair<AggregatedAccountStorageStats, AggregatedAccountReportsState> monthlySnapshot =
+        accountStatsStore.queryMonthlyAggregatedAccountStorageStatsAndState();
+    AggregatedAccountReportsState snapshotState = monthlySnapshot.getSecond();
+    if (!currentMonth.equals(snapshotState.getMonth())) {
+      return false;
+    }
+    containerStorageUsageMonthlyBase =
+        convertAggregatedAccountStorageStatsToMap(monthlySnapshot.getFirst(), config.usePhysicalStorage);
+    monthlyBaseMonth = snapshotState.getMonth();
+    monthlyBaseVersion = snapshotState.getSnapshotVersion();
+    persistMonthlyUsageIfNeeded();
+    logger.info("Refreshed monthly base for month {} at version {}", currentMonth, monthlyBaseVersion);
+    return true;
   }
 
   /**
@@ -273,6 +319,12 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     Runnable updater = () -> {
       try {
         long startTimeMs = System.currentTimeMillis();
+        currentMonth = getCurrentMonth();
+        try {
+          refreshMonthlyStorageUsageIfChanged();
+        } catch (Exception e) {
+          logger.error("Failed to refresh monthly storage usage before retrieving current usage", e);
+        }
         Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
         Map<String, Map<String, Long>> storageUsage =
             convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryAggregatedAccountStorageStats(),
@@ -452,9 +504,6 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
         throw new IllegalArgumentException("Invalid usage map");
       }
 
-      if (backupFiles.contains(filename)) {
-        return;
-      }
       logger.trace("Persist container usage for {}", filename);
       String tempFileName = filename + TEMP_FILE_SUFFIX;
       Path tempFilePath = backupDirPath.resolve(tempFileName);
@@ -466,7 +515,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
           StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
         String usageMapInJson = objectMapper.writeValueAsString(usage);
         channel.write(ByteBuffer.wrap(usageMapInJson.getBytes(StandardCharsets.UTF_8)));
-        Files.move(tempFilePath, filePath);
+        Files.move(tempFilePath, filePath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
       } catch (Exception e) {
         logger.error("Failed to serialize and persist usage map to file {}", filePath, e);
         throw e;
