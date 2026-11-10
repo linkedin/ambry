@@ -480,4 +480,123 @@ public class AmbryReplicaSyncUpManagerTest {
 
     testWithoutMultiDc.replicaSyncUpService.reset();
   }
+
+  /**
+   * Reproduces the "cascading fake peer" bug. When all replicas of a partition in the local DC bootstrap
+   * together (e.g. a new clique), none of the local peers is STANDBY/LEADER, but the intra-DC replica threads still
+   * report lag against them. The peers are empty too, so the reported lag is 0. They must not count as caught up,
+   * otherwise bootstrap completes within minutes while the replica is hundreds of GB behind the remote DCs.
+   */
+  @Test
+  public void testBootstrapPeersNotCountedAsCaughtUp() throws Exception {
+    Properties props = new Properties();
+    props.setProperty("clustermap.replica.catchup.target", "2");
+    AmbryReplicaSyncUpManagerTest test = new AmbryReplicaSyncUpManagerTest(props);
+    MockPartitionId partition = (MockPartitionId) test.currentReplica.getPartitionId();
+    for (ReplicaId localPeer : test.localDcPeerReplicas) {
+      partition.replicaAndState.put(localPeer, ReplicaState.BOOTSTRAP);
+    }
+    test.replicaSyncUpService.initiateBootstrap(test.currentReplica);
+
+    for (ReplicaId localPeer : test.localDcPeerReplicas) {
+      assertFalse("A BOOTSTRAP local peer must not count as caught up",
+          test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica, localPeer, 0L,
+              ReplicaState.STANDBY));
+    }
+    assertFalse("Sync-up must not complete by catching up with BOOTSTRAP peers only",
+        test.replicaSyncUpService.isSyncUpComplete(test.currentReplica));
+
+    // catching up with STANDBY remote peers still completes bootstrap
+    assertFalse("Should not complete: only 1 STANDBY peer caught up",
+        test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica,
+            test.remoteDcPeerReplicas.get(0), 0L, ReplicaState.STANDBY));
+    assertTrue("Should complete: 2 STANDBY peers caught up",
+        test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica,
+            test.remoteDcPeerReplicas.get(1), 0L, ReplicaState.STANDBY));
+
+    test.replicaSyncUpService.reset();
+  }
+
+  /**
+   * Same scenario as {@link #testBootstrapPeersNotCountedAsCaughtUp()} with the multi-DC bootstrap safety check
+   * enabled. BOOTSTRAP local peers must not make the check skip itself: it is only skipped when a local peer has caught
+   * up, and a BOOTSTRAP peer must not be recorded as caught up.
+   */
+  @Test
+  public void testBootstrapPeersDoNotBypassMultiDcCheck() throws Exception {
+    Properties props = new Properties();
+    props.setProperty("clustermap.replica.catchup.require.multi.dc.for.bootstrap", "true");
+    props.setProperty("clustermap.replica.catchup.target", "2");
+    AmbryReplicaSyncUpManagerTest test = new AmbryReplicaSyncUpManagerTest(props);
+    MockPartitionId partition = (MockPartitionId) test.currentReplica.getPartitionId();
+    for (ReplicaId localPeer : test.localDcPeerReplicas) {
+      partition.replicaAndState.put(localPeer, ReplicaState.BOOTSTRAP);
+    }
+    test.replicaSyncUpService.initiateBootstrap(test.currentReplica);
+
+    for (ReplicaId localPeer : test.localDcPeerReplicas) {
+      assertFalse("A BOOTSTRAP local peer must not count as caught up",
+          test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica, localPeer, 0L,
+              ReplicaState.STANDBY));
+    }
+
+    List<String> remoteDcNames =
+        test.remoteDcPeerReplicas.stream().map(r -> r.getDataNodeId().getDatacenterName()).distinct().sorted()
+            .collect(Collectors.toList());
+    assertTrue("Test requires at least 2 remote DCs", remoteDcNames.size() >= 2);
+    List<ReplicaId> firstDcPeers = test.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(remoteDcNames.get(0)))
+        .collect(Collectors.toList());
+    List<ReplicaId> secondDcPeers = test.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(remoteDcNames.get(1)))
+        .collect(Collectors.toList());
+
+    assertFalse("Should not complete: only 1 caught up peer",
+        test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica, firstDcPeers.get(0), 0L,
+            ReplicaState.STANDBY));
+    assertFalse("Should not complete: 2 caught up peers but from a single remote DC",
+        test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica, firstDcPeers.get(1), 0L,
+            ReplicaState.STANDBY));
+    assertTrue("Should complete: caught up with peers from 2 distinct remote DCs",
+        test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica, secondDcPeers.get(0), 0L,
+            ReplicaState.STANDBY));
+
+    test.replicaSyncUpService.reset();
+  }
+
+  /**
+   * Remote peers that are still in BOOTSTRAP (e.g. a fabric being rebuilt) must not count as caught up either.
+   */
+  @Test
+  public void testRemoteBootstrapPeersNotCountedAsCaughtUp() throws Exception {
+    Properties props = new Properties();
+    props.setProperty("clustermap.replica.catchup.target", "2");
+    AmbryReplicaSyncUpManagerTest test = new AmbryReplicaSyncUpManagerTest(props);
+    MockPartitionId partition = (MockPartitionId) test.currentReplica.getPartitionId();
+    String bootstrappingDc = test.remoteDcPeerReplicas.get(0).getDataNodeId().getDatacenterName();
+    List<ReplicaId> bootstrappingPeers = test.remoteDcPeerReplicas.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(bootstrappingDc))
+        .collect(Collectors.toList());
+    assertTrue("Test requires at least 2 peers in " + bootstrappingDc, bootstrappingPeers.size() >= 2);
+    for (ReplicaId remotePeer : bootstrappingPeers) {
+      partition.replicaAndState.put(remotePeer, ReplicaState.BOOTSTRAP);
+    }
+    test.replicaSyncUpService.initiateBootstrap(test.currentReplica);
+
+    for (ReplicaId remotePeer : bootstrappingPeers) {
+      assertFalse("A BOOTSTRAP remote peer must not count as caught up",
+          test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica, remotePeer, 0L,
+              ReplicaState.STANDBY));
+    }
+
+    // the catchup target is max(2, number of local peers) = 2, so both STANDBY local peers are needed
+    assertFalse("Should not complete: only 1 STANDBY peer caught up",
+        test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica,
+            test.localDcPeerReplicas.get(0), 0L, ReplicaState.STANDBY));
+    assertTrue("Should complete: 2 STANDBY peers caught up",
+        test.replicaSyncUpService.updateReplicaLagAndCheckSyncStatus(test.currentReplica,
+            test.localDcPeerReplicas.get(1), 0L, ReplicaState.STANDBY));
+
+    test.replicaSyncUpService.reset();
+  }
 }

@@ -334,6 +334,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     // refer to those replicas that current replica has caught up with
     private final Set<ReplicaId> localDcCaughtUpReplicas = ConcurrentHashMap.newKeySet();
     private final Set<ReplicaId> remoteDcCaughtUpReplicas = ConcurrentHashMap.newKeySet();
+    // peers that reported lag but are not tracked (not STANDBY/LEADER when sync-up started); only used to log once each
+    private final Set<ReplicaId> untrackedPeerReplicas = ConcurrentHashMap.newKeySet();
     private final String localDcName;
     private final long acceptableThreshold;
     private final int catchupTarget;
@@ -388,10 +390,25 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
 
     /**
      * Update replication lag in bytes between current replica and specified peer.
+     * <p>
+     * While bootstrapping, only peers that were STANDBY/LEADER when this object was created (i.e. the peers tracked by
+     * the constructor) can count towards the catch-up target. Replica threads report lag for every peer of the
+     * partition, including peers that are themselves still in BOOTSTRAP. Those peers are typically empty, so their
+     * lag against this (also empty) replica is ~0 and they would be counted as "caught up", completing bootstrap
+     * without the replica having copied the data from any real replica.
      * @param peerReplica the peer replica that the current replica is lagging behind
      * @param lagInBytes the bytes of current replica's lag from peer replica
      */
     void updateLagInfo(ReplicaId peerReplica, long lagInBytes) {
+      if (currentState == ReplicaState.BOOTSTRAP && !localDcPeerReplicaAndLag.containsKey(peerReplica)
+          && !remoteDcPeerReplicaAndLag.containsKey(peerReplica)) {
+        if (untrackedPeerReplicas.add(peerReplica)) {
+          logger.info("LocalReplicaLagInfo: Partition {}, ignoring lag {} reported for peer {} because it was not in "
+                  + "STANDBY/LEADER state when bootstrap sync-up started",
+              replicaOnCurrentNode.getPartitionId().toPathString(), lagInBytes, peerReplica);
+        }
+        return;
+      }
       if (peerReplica.getDataNodeId().getDatacenterName().equals(localDcName)) {
         localDcPeerReplicaAndLag.put(peerReplica, lagInBytes);
         if (lagInBytes <= acceptableThreshold) {
