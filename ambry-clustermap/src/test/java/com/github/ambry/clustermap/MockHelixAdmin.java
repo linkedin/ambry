@@ -864,7 +864,10 @@ public class MockHelixAdmin implements HelixAdmin {
     throw new IllegalStateException("Not implemented");
   }
 
-  @Override
+  // NOTE: getBatchDisabledInstances was removed from the org.apache.helix.HelixAdmin interface
+  // (see linkedin/helix#253). The @Override annotation is dropped so this mock compiles against
+  // both the current and the post-removal Helix versions. This now-unused stub can be deleted
+  // entirely once Ambry adopts the Helix release that removes the method.
   public Map<String, String> getBatchDisabledInstances(String s) {
     throw new IllegalStateException("Not implemented");
   }
