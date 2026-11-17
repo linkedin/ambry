@@ -68,23 +68,35 @@ public class CostPolicyTestUtils {
    */
   public static RestRequest createMockRequestWithMethod(RestMethod restMethod, String uri, long bytesReceived)
       throws RestServiceException {
+    String actualUri = (restMethod == RestMethod.POST && !uri.contains(Operations.STITCH)) ? "/" : uri;
+    return createMockRequestWithMethod(restMethod, actualUri, bytesReceived, Collections.emptyMap());
+  }
+
+  /**
+   * Creates a mock {@link RestRequest} object for test with additional arguments.
+   * @param restMethod {@link RestMethod} of the RestRequest.
+   * @param uri URI of the RestRequest.
+   * @param bytesReceived number of bytes received in the request.
+   * @param additionalArgs additional arguments to include in request arguments.
+   * @return RestRequest object.
+   */
+  public static RestRequest createMockRequestWithMethod(RestMethod restMethod, String uri, long bytesReceived,
+      Map<String, Object> additionalArgs) throws RestServiceException {
     RestRequest restRequest = mock(RestRequest.class);
     when(restRequest.getRestMethod()).thenReturn(restMethod);
     when(restRequest.getBlobBytesReceived()).thenReturn(bytesReceived);
     when(restRequest.getBytesReceived()).thenReturn(bytesReceived);
-    if (restMethod == RestMethod.POST) {
-      when(restRequest.getUri()).thenReturn("/");
-      when(restRequest.getPath()).thenReturn("/");
-    } else {
-      when(restRequest.getUri()).thenReturn(uri);
-      when(restRequest.getPath()).thenReturn(uri);
-    }
+    when(restRequest.getUri()).thenReturn(uri);
+    when(restRequest.getPath()).thenReturn(uri);
     RequestPath requestPath = RequestPath.parse(restRequest, null, "ambry-test");
     if (restMethod == RestMethod.PUT && bytesReceived != -1) {
       requestPath =
           RequestPath.parse("/" + Operations.NAMED_BLOB, Collections.emptyMap(), Collections.emptyList(), "ambry-test");
     }
     Map<String, Object> args = new HashMap<>();
+    if (additionalArgs != null) {
+      args.putAll(additionalArgs);
+    }
     args.put(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
     when(restRequest.getArgs()).thenReturn(args);
     return restRequest;
