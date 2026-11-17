@@ -95,11 +95,6 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   @Override
-  public void enableInstance(String clusterName, String instanceName, boolean enabled,
-      InstanceConstants.InstanceDisabledType disabledType, String reason) {
-  }
-
-  @Override
   public void purgeOfflineInstances(String clusterName, long offlineDuration) {
   }
 
@@ -849,7 +844,6 @@ public class MockHelixAdmin implements HelixAdmin {
     throw new IllegalStateException("Not implemented");
   }
 
-  @Override
   public void setInstanceZoneId(String clusterName, String instanceName, String zoneId) {
     throw new IllegalStateException("Not implemented");
   }
@@ -864,7 +858,6 @@ public class MockHelixAdmin implements HelixAdmin {
     throw new IllegalStateException("Not implemented");
   }
 
-  @Override
   public Map<String, String> getBatchDisabledInstances(String s) {
     throw new IllegalStateException("Not implemented");
   }
