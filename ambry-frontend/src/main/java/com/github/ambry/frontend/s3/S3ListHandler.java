@@ -31,7 +31,9 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.ByteBufferDataInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -68,6 +70,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final FrontendConfig frontendConfig;
   public static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
   private static final String DELIMITER = "/";
+  private static final String URL_ENCODING_TYPE = "url";
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
@@ -120,16 +123,18 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     //By default S3 list returns up to 1000 key names.
     int maxKeysValue = maxKeys == null ? DEFAULT_MAX_KEY_VALUE : Integer.parseInt(maxKeys);
     int keyCount = namedBlobRecordPage.getEntries().size();
+    // With encoding-type=url, S3 URL-encodes key names in the response and clients (e.g. the AWS SDKs) URL-decode them.
+    boolean urlEncode = URL_ENCODING_TYPE.equals(encodingType);
     // Iterate through list of blob names.
     List<Contents> contentsList = new ArrayList<>();
     // Use LinkedHashSet to maintain order of directories.
     Set<String> dirSet = new LinkedHashSet<>();
     for (NamedBlobListEntry namedBlobRecord : namedBlobRecordPage.getEntries()) {
       if (namedBlobRecord.isDirectory()) {
-        dirSet.add(namedBlobRecord.getBlobName());
+        dirSet.add(urlEncodeIfRequested(namedBlobRecord.getBlobName(), urlEncode));
         continue;
       }
-      String blobName = namedBlobRecord.getBlobName();
+      String blobName = urlEncodeIfRequested(namedBlobRecord.getBlobName(), urlEncode);
       long blobSize = namedBlobRecord.getBlobSize();
       long modifiedTimeMs = namedBlobRecord.getModifiedTimeMs();
       if (modifiedTimeMs == -1) {
@@ -146,6 +151,8 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     }
 
     boolean enableDelimiter = delimiter != null && delimiter.equals(DELIMITER) && frontendConfig.enableDelimiter;
+    prefix = urlEncodeIfRequested(prefix, urlEncode);
+    delimiter = urlEncodeIfRequested(delimiter, urlEncode);
     if (LIST_TYPE_VERSION_2.equals(getHeader(restRequest.getArgs(), LIST_TYPE, false))) {
       ListBucketResultV2 resultV2 =
           new ListBucketResultV2(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList, encodingType,
@@ -157,12 +164,45 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     } else {
       ListBucketResult result =
           new ListBucketResult(containerName, prefix, maxKeysValue, keyCount, delimiter, contentsList, encodingType,
-              marker, namedBlobRecordPage.getNextPageToken(), namedBlobRecordPage.getNextPageToken() != null,
+              urlEncodeIfRequested(marker, urlEncode),
+              urlEncodeIfRequested(namedBlobRecordPage.getNextPageToken(), urlEncode),
+              namedBlobRecordPage.getNextPageToken() != null,
               enableDelimiter ? commonPrefixes : null);
       LOGGER.debug("Sending response for S3 ListObjects {}", result);
       // Serialize xml
       xmlMapper.writeValue(outputStream, result);
     }
     return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+  }
+
+  /**
+   * URL-encodes a key name the way S3 does for {@code encoding-type=url}: form encoding (a space becomes '+') with '/'
+   * left as is.
+   * @param value the value to encode. May be {@code null}.
+   * @param urlEncode {@code true} if the client asked for {@code encoding-type=url}.
+   * @return the encoded value, or {@code value} itself if it is {@code null} or encoding was not requested.
+   * @throws IOException if UTF-8 is not supported.
+   */
+  private static String urlEncodeIfRequested(String value, boolean urlEncode) throws IOException {
+    if (!urlEncode || value == null || !needsUrlEncoding(value)) {
+      return value;
+    }
+    return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("%2F", "/");
+  }
+
+  /**
+   * @param value the value to check.
+   * @return {@code true} if {@link #urlEncodeIfRequested} would change {@code value}, that is, if it has a character
+   *         other than ASCII letters and digits and {@code . - * _ /}.
+   */
+  private static boolean needsUrlEncoding(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      char c = value.charAt(i);
+      if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '/' || c == '.'
+          || c == '-' || c == '_' || c == '*')) {
+        return true;
+      }
+    }
+    return false;
   }
 }
