@@ -42,6 +42,7 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
@@ -593,6 +594,80 @@ public class S3ListHandlerTest {
     // 5. Parse and assert that <CommonPrefixes> is not included
     ListBucketResultV2 result = xmlMapper.readValue(buffer.array(), ListBucketResultV2.class);
     assertNull("CommonPrefixes should be null when delimiter is disabled", result.getCommonPrefixes());
+  }
+
+  /**
+   * Test that when a client asks for {@code encoding-type=url}, key names and the other key-derived elements of the
+   * response are URL-encoded, so that a client that URL-decodes them (as the AWS SDKs do) gets the stored names back.
+   */
+  @Test
+  public void testListObjectsWithUrlEncodingType() throws Exception {
+    String prefix = "special/";
+    // Keys as stored, and as they appear (percent-encoded) in the PUT request path.
+    String key1 = prefix + "a+b c%\u00e9.txt";
+    String key2 = prefix + "z+1.txt";
+    putNamedBlob(prefix + "a%2Bb%20c%25%C3%A9.txt");
+    putNamedBlob(prefix + "z%2B1.txt");
+    String listUri = S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + "/?prefix=" + prefix;
+
+    // Without encoding-type, names are returned as stored.
+    ListBucketResultV2 resultV2 = xmlMapper.readValue(listObjects(listUri + "&list-type=2"), ListBucketResultV2.class);
+    assertEquals("Mismatch in key name", key1, resultV2.getContents().get(0).getKey());
+    assertEquals("Mismatch in key name", key2, resultV2.getContents().get(1).getKey());
+
+    // ListObjectsV2 with encoding-type=url
+    resultV2 =
+        xmlMapper.readValue(listObjects(listUri + "&list-type=2&encoding-type=url"), ListBucketResultV2.class);
+    assertEquals("Mismatch in encoding type", "url", resultV2.getEncodingType());
+    assertEquals("Mismatch in key name", "special/a%2Bb+c%25%C3%A9.txt", resultV2.getContents().get(0).getKey());
+    assertEquals("Mismatch in decoded key name", key1, urlDecode(resultV2.getContents().get(0).getKey()));
+    assertEquals("Mismatch in decoded key name", key2, urlDecode(resultV2.getContents().get(1).getKey()));
+    assertEquals("Mismatch in decoded prefix", prefix, urlDecode(resultV2.getPrefix()));
+
+    // ListObjects (V1) with encoding-type=url: NextMarker is a key name too and must round trip.
+    ListBucketResult result =
+        xmlMapper.readValue(listObjects(listUri + "&max-keys=1&encoding-type=url"), ListBucketResult.class);
+    assertEquals("Mismatch in encoding type", "url", result.getEncodingType());
+    assertEquals("Mismatch in key count", 1, result.getKeyCount());
+    assertEquals("Mismatch in decoded key name", key1, urlDecode(result.getContents().get(0).getKey()));
+    assertEquals("Mismatch in decoded next marker", key2, urlDecode(result.getNextMarker()));
+    assertTrue("Mismatch in IsTruncated", result.getIsTruncated());
+  }
+
+  private void putNamedBlob(String encodedKey) throws Exception {
+    String requestPath =
+        NAMED_BLOB_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + encodedKey;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
+    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, requestPath, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(TestUtils.getRandomBytes(16)), null)));
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    FutureResult<Void> putResult = new FutureResult<>();
+    namedBlobPutHandler.handle(request, new MockRestResponseChannel(), putResult::done);
+    putResult.get();
+  }
+
+  private byte[] listObjects(String listUri) throws Exception {
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, listUri, new JSONObject(), null);
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    request.setArg(LIST_REQUEST, "true");
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3ListHandler.handle(request, restResponseChannel, futureResult::done);
+    ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) futureResult.get()).getContent();
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    return byteBuffer.array();
+  }
+
+  /**
+   * Decodes a value the same way S3 clients decode {@code encoding-type=url} responses.
+   */
+  private static String urlDecode(String value) throws Exception {
+    return URLDecoder.decode(value, "UTF-8");
   }
 
   /**
