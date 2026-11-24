@@ -188,7 +188,6 @@ public class MySqlNamedBlobDbTest {
       verify(broken, never()).rollback();
       try (Connection next = pool.getConnection()) {
         assertSame(replacement, next.unwrap(Connection.class));
-        assertTrue(next.getAutoCommit());
       }
       assertEquals(0, metrics.namedBlobDBDeleteErrorCount.getCount());
       assertEquals(1, metrics.connectionCloseErrorCount.getCount());

@@ -798,37 +798,33 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
     private <T> T runTransaction(boolean autoCommit, TransactionGeneric<T> transaction) throws Exception {
       Connection connection = dataSource.getConnection();
-      boolean returnToPool = true;
-      Throwable operationFailure = null;
+      final T result;
       try {
         if (!autoCommit) {
           connection.setAutoCommit(false);
         }
-        T result = transaction.run(connection);
+        result = transaction.run(connection);
         if (!autoCommit) {
           connection.commit();
         }
-        return result;
       } catch (Exception | Error failure) {
-        operationFailure = failure;
         if (!autoCommit) {
           try {
             connection.rollback();
           } catch (Exception | Error rollbackFailure) {
             // Returning an unresolved transaction to the pool could commit it when autocommit is restored.
-            returnToPool = false;
             discardConnection(connection, rollbackFailure);
             if (failure != rollbackFailure) {
               failure.addSuppressed(rollbackFailure);
             }
+            throw failure;
           }
         }
+        returnConnection(connection, autoCommit, failure);
         throw failure;
-      } finally {
-        if (returnToPool) {
-          returnConnection(connection, autoCommit, operationFailure);
-        }
       }
+      returnConnection(connection, autoCommit, null);
+      return result;
     }
 
     private void returnConnection(Connection connection, boolean autoCommit, Throwable operationFailure) {
