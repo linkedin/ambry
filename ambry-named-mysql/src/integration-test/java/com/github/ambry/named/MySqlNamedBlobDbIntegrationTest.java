@@ -36,6 +36,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -65,6 +66,80 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
 
   public MySqlNamedBlobDbIntegrationTest(boolean enableHardDelete) throws Exception {
     super(enableHardDelete, MySqlNamedBlobDbConfig.DEFAULT_LIST_NAMED_BLOBS_SQL_OPTION);
+  }
+
+  @Test
+  public void testNameMutationFailureRollsBackPublishedJob() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String suffix = UUID.randomUUID().toString().replace("-", "");
+    String name = "rollback-" + suffix;
+    String jobs = "test_jobs_" + suffix;
+    String trigger = "test_reject_" + suffix;
+    NamedBlobRecord record = namedBlobDb.put(new NamedBlobRecord(account.getName(), container.getName(), name,
+        getBlobId(account, container), Utils.Infinite_Time)).get(10, TimeUnit.SECONDS).getInsertedRecord();
+    DataSource db = namedBlobDb.getDataSources().get("dc1");
+    try (Connection observer = db.getConnection(); Statement sql = observer.createStatement()) {
+      sql.execute("CREATE TABLE " + jobs + " (version BIGINT PRIMARY KEY) ENGINE=InnoDB");
+      try {
+        sql.execute("CREATE TRIGGER " + trigger + " BEFORE " + (enableHardDelete ? "DELETE" : "UPDATE")
+            + " ON named_blobs_v2 FOR EACH ROW BEGIN IF OLD.blob_name = '" + name
+            + "' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'test rejected name mutation'; END IF; END");
+        try {
+          TestUtils.assertException(ExecutionException.class, () -> namedBlobDb.deleteWithCleanupHandoff(
+              account.getName(), container.getName(), name, (connection, a, b, n, versions) -> {
+                try (PreparedStatement insert = connection.prepareStatement("INSERT INTO " + jobs + " VALUES (?)")) {
+                  insert.setLong(1, versions.get(0).getVersion());
+                  insert.executeUpdate();
+                }
+              }).get(10, TimeUnit.SECONDS), e -> assertEquals("45000", ((SQLException) e.getCause()).getSQLState()));
+          try (ResultSet rows = sql.executeQuery("SELECT COUNT(*) FROM " + jobs)) {
+            assertTrue(rows.next());
+            assertEquals(0, rows.getInt(1));
+          }
+          try (PreparedStatement get = observer.prepareStatement("SELECT blob_id, deleted_ts FROM named_blobs_v2"
+              + " WHERE account_id=? AND container_id=? AND blob_name=? AND version=?")) {
+            get.setInt(1, account.getId());
+            get.setInt(2, container.getId());
+            get.setString(3, name);
+            get.setLong(4, record.getVersion());
+            try (ResultSet rows = get.executeQuery()) {
+              assertTrue(rows.next());
+              assertArrayEquals(Utils.base64DecodeUrlSafe(record.getBlobId()), rows.getBytes(1));
+              assertNull(rows.getTimestamp(2));
+            }
+          }
+        } finally {
+          sql.execute("DROP TRIGGER " + trigger);
+        }
+      } finally {
+        sql.execute("DROP TABLE " + jobs);
+      }
+    }
+  }
+
+  @Test
+  public void testHandoffOnlyOwnsNewlyRetiredVersions() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String name = "mixed-versions";
+    namedBlobDb.put(new NamedBlobRecord(account.getName(), container.getName(), name, getBlobId(account, container),
+        1, 1), NamedBlobState.READY, true).get(10, TimeUnit.SECONDS);
+    NamedBlobRecord live = namedBlobDb.put(new NamedBlobRecord(account.getName(), container.getName(), name,
+        getBlobId(account, container), Utils.Infinite_Time, 2), NamedBlobState.READY, true)
+        .get(10, TimeUnit.SECONDS).getInsertedRecord();
+    List<DeleteResult.BlobVersion> published = new ArrayList<>();
+    MySqlNamedBlobDb.CleanupHandoff handoff = (connection, a, b, n, versions) -> published.addAll(versions);
+    namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), name, handoff)
+        .get(10, TimeUnit.SECONDS);
+    assertEquals(Arrays.asList(new DeleteResult.BlobVersion(live.getBlobId(), live.getVersion(), false)), published);
+    checkErrorCode(() -> namedBlobDb.updateBlobTtlAndStateToReady(live), RestServiceErrorCode.NotFound);
+    published.clear();
+    namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), name, handoff)
+        .get(10, TimeUnit.SECONDS);
+    assertTrue(published.isEmpty());
+    checkErrorCode(() -> namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), "absent", handoff),
+        RestServiceErrorCode.NotFound);
   }
 
   @Test
@@ -729,7 +804,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     String blobId = getBlobId(account, container);
     String blobName = "good/" + "case6" + "/more path segments--";
     NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId,
-        staleCutoffTime + TimeUnit.HOURS.toMillis(1));
+        System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1));
 
     time.setCurrentMilliseconds(staleCutoffTime);
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
@@ -999,7 +1074,7 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
    * @param errorCode the expected {@link RestServiceErrorCode}.
    */
   private void checkErrorCode(Callable<Future<?>> callable, RestServiceErrorCode errorCode) throws Exception {
-    TestUtils.assertException(ExecutionException.class, () -> callable.call().get(), e -> {
+    TestUtils.assertException(ExecutionException.class, () -> callable.call().get(10, TimeUnit.SECONDS), e -> {
       RestServiceException rse = (RestServiceException) e.getCause();
       assertEquals("Unexpected error code for get after delete", errorCode, rse.getErrorCode());
     });

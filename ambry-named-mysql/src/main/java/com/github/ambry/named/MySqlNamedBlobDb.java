@@ -36,6 +36,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import com.zaxxer.hikari.HikariDataSource;
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Connection;
@@ -160,7 +161,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * Set named blob state to be READY and delete timestamp to null for TtlUpdate case
    */
   private static final String TTL_UPDATE_QUERY =
-      String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
+      String.format("UPDATE %s SET %s, %s = NULL WHERE %s AND (%s IS NULL OR %s > %s)", NAMED_BLOBS_V2, STATE_MATCH,
+          DELETED_TS, PK_MATCH_VERSION, DELETED_TS, DELETED_TS, CURRENT_TIME);
 
   private static final String GET_BLOBS_FOR_CONTAINER_TEMPLATE = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " + "FROM %s "
@@ -512,8 +514,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     /**
      * Publish previously staged, immutable cleanup manifests for the exact locked versions, or throw if any is
      * missing or mismatched. Use only this transaction: workers must not see the jobs until the name deletion
-     * commits. Do not fetch manifests over the network while holding the name locks. On a repeat, verify an
-     * existing handoff rather than issuing new deletes for a previously deleted version.
+     * commits. Only versions retired by this transaction are supplied. A repeat with no live rows does not publish;
+     * an absent name returns NotFound, not proof of a previous handoff. Do not do network I/O or commit here.
      */
     void publish(Connection connection, short accountId, short containerId, String name,
         List<DeleteResult.BlobVersion> versions) throws SQLException;
@@ -796,38 +798,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
         Callback<T> callback) {
-      final long enqueueTimeMs = System.currentTimeMillis();
-      try {
-        executor.submit(() -> {
-          enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
-          try (Connection connection = dataSource.getConnection()) {
-            T result;
-            if (autoCommit) {
-              result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-            } else {
-              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-              connection.setAutoCommit(false);
-              try {
-                result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-                connection.commit();
-              } catch (Exception e) {
-                connection.rollback();
-                throw e;
-              } finally {
-                connection.setAutoCommit(true);
-              }
-            }
-            callback.onCompletion(result, null);
-          } catch (Exception e) {
-            if (isConnectionFailure(e)) {
-              connectionFailureCount.inc();
-            }
-            callback.onCompletion(null, e);
-          }
-        });
-      } catch (RejectedExecutionException e) {
-        rejectTransaction(callback, e);
-      }
+      executeTransactionGeneric(autoCommit,
+          connection -> transaction.run(container.getParentAccountId(), container.getId(), connection), callback);
     }
 
     <T> void executeTransactionGeneric(boolean autoCommit, TransactionGeneric<T> transaction, Callback<T> callback) {
@@ -835,34 +807,62 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       try {
         executor.submit(() -> {
           enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
-          try (Connection connection = dataSource.getConnection()) {
-            T result;
-            if (autoCommit) {
-              result = transaction.run(connection);
-            } else {
-              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-              connection.setAutoCommit(false);
-              try {
-                result = transaction.run(connection);
-                connection.commit();
-              } catch (Exception e) {
-                connection.rollback();
-                throw e;
-              } finally {
-                connection.setAutoCommit(true);
-              }
-            }
-            callback.onCompletion(result, null);
-          } catch (Exception e) {
+          T result;
+          try {
+            result = runTransaction(autoCommit, transaction);
+          } catch (Exception | Error e) {
             if (isConnectionFailure(e)) {
               connectionFailureCount.inc();
             }
-            callback.onCompletion(null, e);
+            callback.onCompletion(null, e instanceof Exception ? (Exception) e : new IllegalStateException(e));
+            return;
           }
+          callback.onCompletion(result, null);
         });
       } catch (RejectedExecutionException e) {
         rejectTransaction(callback, e);
       }
+    }
+
+    private <T> T runTransaction(boolean autoCommit, TransactionGeneric<T> transaction) throws Exception {
+      Connection connection = dataSource.getConnection();
+      T result;
+      try {
+        if (!autoCommit) {
+          connection.setAutoCommit(false);
+        }
+        result = transaction.run(connection);
+        if (!autoCommit) {
+          connection.commit();
+        }
+      } catch (Exception | Error failure) {
+        if (!autoCommit) {
+          try {
+            connection.rollback();
+          } catch (Exception | Error rollbackFailure) {
+            failure.addSuppressed(rollbackFailure);
+            // Returning an unresolved transaction to the pool could commit it when autocommit is restored.
+            try {
+              if (dataSource instanceof HikariDataSource) {
+                ((HikariDataSource) dataSource).evictConnection(connection);
+              } else {
+                connection.abort(Runnable::run);
+              }
+            } catch (Exception | Error discardFailure) {
+              failure.addSuppressed(discardFailure);
+            }
+            throw failure;
+          }
+        }
+        try {
+          connection.close();
+        } catch (Exception | Error closeFailure) {
+          failure.addSuppressed(closeFailure);
+        }
+        throw failure;
+      }
+      connection.close();
+      return result;
     }
 
     private <T> void rejectTransaction(Callback<T> callback, RejectedExecutionException cause) {
@@ -1194,7 +1194,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     String blobId;
     long version;
     Timestamp currentDeleteTime = null;
-    boolean alreadyDeleted;
+    boolean found = false;
     List<DeleteResult.BlobVersion> blobVersions = new ArrayList<>();
     List<Long> versionsToDelete = new ArrayList<>();
     String query = "";
@@ -1211,13 +1211,16 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           version = resultSet.getLong(2);
           Timestamp originalDeletionTime = resultSet.getTimestamp(3);
           currentDeleteTime = resultSet.getTimestamp(4);
-          alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
-          blobVersions.add(new DeleteResult.BlobVersion(blobId, version, alreadyDeleted));
+          found = true;
+          boolean alreadyDeleted = originalDeletionTime != null && !originalDeletionTime.after(currentDeleteTime);
+          if (handoff == null || !alreadyDeleted) {
+            blobVersions.add(new DeleteResult.BlobVersion(blobId, version, alreadyDeleted));
+          }
           if (!alreadyDeleted) {
             versionsToDelete.add(version);
           }
         }
-        if (blobVersions.isEmpty()) {
+        if (!found) {
           throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
               blobName);
         }
@@ -1226,18 +1229,20 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
-    if (handoff != null) {
-      try {
-        handoff.publish(connection, accountId, containerId, blobName, Collections.unmodifiableList(blobVersions));
-      } catch (SQLException e) {
-        throw new RestServiceException("Could not record named blob cleanup", e, RestServiceErrorCode.ServiceUnavailable);
-      }
-    }
-    // only need to issue an update statement if the row was not already marked as deleted.
+    DeleteResult result = new DeleteResult(blobVersions);
     if (!versionsToDelete.isEmpty()) {
+      if (handoff != null) {
+        try {
+          handoff.publish(connection, accountId, containerId, blobName, result.getBlobVersions());
+        } catch (SQLException e) {
+          metricsRecoder.namedBlobDBDeleteErrorCount.inc();
+          throw new RestServiceException("Could not record named blob cleanup", e,
+              RestServiceErrorCode.ServiceUnavailable);
+        }
+      }
       applyDelete(accountId, containerId, blobName, currentDeleteTime, versionsToDelete, connection);
     }
-    return new DeleteResult(blobVersions);
+    return result;
   }
 
   /**

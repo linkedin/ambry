@@ -78,6 +78,7 @@ public class MySqlNamedBlobDbTest {
   private final String foundDatacenter = "dc3";
   private final MockDataSourceFactory dataSourceFactory = new MockDataSourceFactory();
   private final InMemAccountService accountService = new InMemAccountService(false, false);
+  private final Metrics metrics = new Metrics(new MetricRegistry(), "");
   private final MySqlNamedBlobDb namedBlobDb;
   private final Account account;
   private final Container container;
@@ -97,7 +98,7 @@ public class MySqlNamedBlobDbTest {
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
-        dataSourceFactory, localDatacenter, new Metrics(new MetricRegistry(), ""));
+        dataSourceFactory, localDatacenter, metrics);
     account = accountService.createAndAddRandomAccount();
     container = account.getAllContainers().iterator().next();
     MockClusterMap clusterMap = new MockClusterMap();
@@ -129,21 +130,45 @@ public class MySqlNamedBlobDbTest {
   public void testCleanupHandoffFailureLeavesNamedVersionsIntact() throws Exception {
     Connection connection = mock(Connection.class);
     mockNamedVersionsForDelete(connection);
-    checkErrorCode(() -> namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), "name",
-        (transaction, accountId, containerId, name, versions) -> {
-          assertSame(connection, transaction);
-          assertEquals(account.getId(), accountId);
-          assertEquals(container.getId(), containerId);
-          assertEquals("name", name);
-          assertEquals(Arrays.asList(new DeleteResult.BlobVersion(id, 2, false),
-              new DeleteResult.BlobVersion(id, 1, false)), versions);
-          throw new SQLException("Incomplete manifest for the second version");
-        }), RestServiceErrorCode.ServiceUnavailable);
+    MySqlNamedBlobDb.CleanupHandoff handoff = mock(MySqlNamedBlobDb.CleanupHandoff.class);
+    doThrow(new SQLException("Cannot insert job")).when(handoff)
+        .publish(any(), anyShort(), anyShort(), anyString(), anyList());
+    checkErrorCode(() -> namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), "name", handoff),
+        RestServiceErrorCode.ServiceUnavailable);
+    verify(handoff).publish(connection, account.getId(), container.getId(), "name",
+        Arrays.asList(new DeleteResult.BlobVersion(id, 2, false), new DeleteResult.BlobVersion(id, 1, false)));
+    assertEquals(1, metrics.namedBlobDBDeleteErrorCount.getCount());
     verify(connection).setAutoCommit(false);
     verify(connection).rollback();
     verify(connection, never()).commit();
     verify(connection, never()).prepareStatement(startsWith("UPDATE"));
     verify(connection, never()).prepareStatement(startsWith("DELETE"));
+  }
+
+  @Test
+  public void testFatalHandoffFailureRollsBackOrDiscardsConnection() throws Exception {
+    for (boolean rollbackFails : Arrays.asList(false, true)) {
+      Connection connection = mock(Connection.class);
+      mockNamedVersionsForDelete(connection);
+      SQLException rollbackFailure = new SQLException("Rollback failed");
+      if (rollbackFails) {
+        doThrow(rollbackFailure).when(connection).rollback();
+      }
+      AssertionError failure = new AssertionError("Publisher failed");
+      TestUtils.assertException(ExecutionException.class, () -> namedBlobDb.deleteWithCleanupHandoff(
+          account.getName(), container.getName(), "name", (c, a, b, n, v) -> { throw failure; }).get(5, TimeUnit.SECONDS),
+          e -> assertSame(failure, e.getCause().getCause()));
+      verify(connection).rollback();
+      verify(connection, never()).setAutoCommit(true);
+      verify(connection, never()).commit();
+      if (rollbackFails) {
+        verify(connection).abort(any());
+        verify(connection, never()).close();
+        assertArrayEquals(new Throwable[]{rollbackFailure}, failure.getSuppressed());
+      } else {
+        verify(connection).close();
+      }
+    }
   }
 
   @Test
@@ -700,7 +725,7 @@ public class MySqlNamedBlobDbTest {
    * @param errorCode the expected {@link RestServiceErrorCode}.
    */
   private void checkErrorCode(Callable<Future<?>> callable, RestServiceErrorCode errorCode) throws Exception {
-    TestUtils.assertException(ExecutionException.class, () -> callable.call().get(), e -> {
+    TestUtils.assertException(ExecutionException.class, () -> callable.call().get(5, TimeUnit.SECONDS), e -> {
       RestServiceException rse = (RestServiceException) e.getCause();
       assertEquals("Unexpected error code for get after delete", errorCode, rse.getErrorCode());
     });
