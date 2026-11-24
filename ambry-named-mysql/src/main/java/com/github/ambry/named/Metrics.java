@@ -62,6 +62,7 @@ public class Metrics {
   public final Counter namedBlobDBDeleteErrorCount;
   public final Counter namedBlobDBInsertErrorCount;
   public final Counter namedBlobDBUpdateErrorCount;
+  final Counter connectionCloseErrorCount;
 
   /**
    * Constructor to create the Metrics.
@@ -129,6 +130,8 @@ public class Metrics {
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBInsertErrorCount"));
     namedBlobDBUpdateErrorCount =
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBUpdateErrorCount"));
+    connectionCloseErrorCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "ConnectionCloseErrorCount"));
   }
 
   /**

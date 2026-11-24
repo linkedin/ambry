@@ -55,7 +55,6 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -161,8 +160,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * Set named blob state to be READY and delete timestamp to null for TtlUpdate case
    */
   private static final String TTL_UPDATE_QUERY =
-      String.format("UPDATE %s SET %s, %s = NULL WHERE %s AND (%s IS NULL OR %s > %s)", NAMED_BLOBS_V2, STATE_MATCH,
-          DELETED_TS, PK_MATCH_VERSION, DELETED_TS, DELETED_TS, CURRENT_TIME);
+      String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
 
   private static final String GET_BLOBS_FOR_CONTAINER_TEMPLATE = String.format(
       "SELECT %s, %s, %s, %s, %s, %s, %s, %s " + "FROM %s "
@@ -497,36 +495,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
-    return delete(accountName, containerName, blobName, null);
-  }
-
-  /**
-   * Hand ownership of the root and child cleanup to a durable worker. Unlike {@link #delete}, this path does not
-   * return IDs to dispatch a second, in-memory router delete.
-   */
-  CompletableFuture<Void> deleteWithCleanupHandoff(String accountName, String containerName, String blobName,
-      CleanupHandoff handoff) {
-    return delete(accountName, containerName, blobName, Objects.requireNonNull(handoff)).thenApply(ignored -> null);
-  }
-
-  @FunctionalInterface
-  interface CleanupHandoff {
-    /**
-     * Publish previously staged, immutable cleanup manifests for the exact locked versions, or throw if any is
-     * missing or mismatched. Use only this transaction: workers must not see the jobs until the name deletion
-     * commits. Only versions retired by this transaction are supplied. A repeat with no live rows does not publish;
-     * an absent name returns NotFound, not proof of a previous handoff. Do not do network I/O or commit here.
-     */
-    void publish(Connection connection, short accountId, short containerId, String name,
-        List<DeleteResult.BlobVersion> versions) throws SQLException;
-  }
-
-  private CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName,
-      CleanupHandoff handoff) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
       DeleteResult deleteResult =
-          run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection, handoff);
+          run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
       metricsRecoder.namedBlobDeleteTimeInMs.update(this.time.milliseconds() - startTime);
       return deleteResult;
     }, null, this.metricsRecoder.namedBlobDBDeleteErrorCount);
@@ -826,22 +798,26 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
     private <T> T runTransaction(boolean autoCommit, TransactionGeneric<T> transaction) throws Exception {
       Connection connection = dataSource.getConnection();
-      T result;
+      boolean returnToPool = true;
       try {
         if (!autoCommit) {
           connection.setAutoCommit(false);
         }
-        result = transaction.run(connection);
+        T result = transaction.run(connection);
         if (!autoCommit) {
           connection.commit();
         }
+        return result;
       } catch (Exception | Error failure) {
         if (!autoCommit) {
           try {
             connection.rollback();
           } catch (Exception | Error rollbackFailure) {
-            failure.addSuppressed(rollbackFailure);
             // Returning an unresolved transaction to the pool could commit it when autocommit is restored.
+            returnToPool = false;
+            if (failure != rollbackFailure) {
+              failure.addSuppressed(rollbackFailure);
+            }
             try {
               if (dataSource instanceof HikariDataSource) {
                 ((HikariDataSource) dataSource).evictConnection(connection);
@@ -849,20 +825,24 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
                 connection.abort(Runnable::run);
               }
             } catch (Exception | Error discardFailure) {
-              failure.addSuppressed(discardFailure);
+              if (failure != discardFailure) {
+                failure.addSuppressed(discardFailure);
+              }
             }
-            throw failure;
           }
         }
-        try {
-          connection.close();
-        } catch (Exception | Error closeFailure) {
-          failure.addSuppressed(closeFailure);
-        }
         throw failure;
+      } finally {
+        if (returnToPool) {
+          try {
+            connection.close();
+          } catch (Exception | Error closeFailure) {
+            // Returning the connection cannot change the transaction outcome reported to the caller.
+            metrics.connectionCloseErrorCount.inc();
+            logger.error("Failed to return a named blob DB connection in {}", datacenter, closeFailure);
+          }
+        }
       }
-      connection.close();
-      return result;
     }
 
     private <T> void rejectTransaction(Callback<T> callback, RejectedExecutionException cause) {
@@ -1190,11 +1170,11 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private DeleteResult run_delete_v2(String accountName, String containerName, String blobName, short accountId,
-      short containerId, Connection connection, CleanupHandoff handoff) throws Exception {
+      short containerId, Connection connection) throws Exception {
     String blobId;
     long version;
     Timestamp currentDeleteTime = null;
-    boolean found = false;
+    boolean alreadyDeleted;
     List<DeleteResult.BlobVersion> blobVersions = new ArrayList<>();
     List<Long> versionsToDelete = new ArrayList<>();
     String query = "";
@@ -1211,16 +1191,13 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           version = resultSet.getLong(2);
           Timestamp originalDeletionTime = resultSet.getTimestamp(3);
           currentDeleteTime = resultSet.getTimestamp(4);
-          found = true;
-          boolean alreadyDeleted = originalDeletionTime != null && !originalDeletionTime.after(currentDeleteTime);
-          if (handoff == null || !alreadyDeleted) {
-            blobVersions.add(new DeleteResult.BlobVersion(blobId, version, alreadyDeleted));
-          }
+          alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
+          blobVersions.add(new DeleteResult.BlobVersion(blobId, version, alreadyDeleted));
           if (!alreadyDeleted) {
             versionsToDelete.add(version);
           }
         }
-        if (!found) {
+        if (blobVersions.isEmpty()) {
           throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
               blobName);
         }
@@ -1229,20 +1206,11 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
-    DeleteResult result = new DeleteResult(blobVersions);
+    // only need to issue an update statement if the row was not already marked as deleted.
     if (!versionsToDelete.isEmpty()) {
-      if (handoff != null) {
-        try {
-          handoff.publish(connection, accountId, containerId, blobName, result.getBlobVersions());
-        } catch (SQLException e) {
-          metricsRecoder.namedBlobDBDeleteErrorCount.inc();
-          throw new RestServiceException("Could not record named blob cleanup", e,
-              RestServiceErrorCode.ServiceUnavailable);
-        }
-      }
       applyDelete(accountId, containerId, blobName, currentDeleteTime, versionsToDelete, connection);
     }
-    return result;
+    return new DeleteResult(blobVersions);
   }
 
   /**

@@ -34,6 +34,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.zaxxer.hikari.HikariDataSource;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -62,7 +63,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
-import org.mockito.InOrder;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -78,7 +78,6 @@ public class MySqlNamedBlobDbTest {
   private final String foundDatacenter = "dc3";
   private final MockDataSourceFactory dataSourceFactory = new MockDataSourceFactory();
   private final InMemAccountService accountService = new InMemAccountService(false, false);
-  private final Metrics metrics = new Metrics(new MetricRegistry(), "");
   private final MySqlNamedBlobDb namedBlobDb;
   private final Account account;
   private final Container container;
@@ -98,7 +97,7 @@ public class MySqlNamedBlobDbTest {
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
-        dataSourceFactory, localDatacenter, metrics);
+        dataSourceFactory, localDatacenter, new Metrics(new MetricRegistry(), ""));
     account = accountService.createAndAddRandomAccount();
     container = account.getAllContainers().iterator().next();
     MockClusterMap clusterMap = new MockClusterMap();
@@ -127,77 +126,101 @@ public class MySqlNamedBlobDbTest {
   }
 
   @Test
-  public void testCleanupHandoffFailureLeavesNamedVersionsIntact() throws Exception {
+  public void testHardDeleteReturnsVersionsWhenPoolReturnFails() throws Exception {
     Connection connection = mock(Connection.class);
-    mockNamedVersionsForDelete(connection);
-    MySqlNamedBlobDb.CleanupHandoff handoff = mock(MySqlNamedBlobDb.CleanupHandoff.class);
-    doThrow(new SQLException("Cannot insert job")).when(handoff)
-        .publish(any(), anyShort(), anyShort(), anyString(), anyList());
-    checkErrorCode(() -> namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), "name", handoff),
-        RestServiceErrorCode.ServiceUnavailable);
-    verify(handoff).publish(connection, account.getId(), container.getId(), "name",
-        Arrays.asList(new DeleteResult.BlobVersion(id, 2, false), new DeleteResult.BlobVersion(id, 1, false)));
-    assertEquals(1, metrics.namedBlobDBDeleteErrorCount.getCount());
-    verify(connection).setAutoCommit(false);
-    verify(connection).rollback();
-    verify(connection, never()).commit();
-    verify(connection, never()).prepareStatement(startsWith("UPDATE"));
-    verify(connection, never()).prepareStatement(startsWith("DELETE"));
-  }
-
-  @Test
-  public void testFatalHandoffFailureRollsBackOrDiscardsConnection() throws Exception {
-    for (boolean rollbackFails : Arrays.asList(false, true)) {
-      Connection connection = mock(Connection.class);
-      mockNamedVersionsForDelete(connection);
-      SQLException rollbackFailure = new SQLException("Rollback failed");
-      if (rollbackFails) {
-        doThrow(rollbackFailure).when(connection).rollback();
-      }
-      AssertionError failure = new AssertionError("Publisher failed");
-      TestUtils.assertException(ExecutionException.class, () -> namedBlobDb.deleteWithCleanupHandoff(
-          account.getName(), container.getName(), "name", (c, a, b, n, v) -> { throw failure; }).get(5, TimeUnit.SECONDS),
-          e -> assertSame(failure, e.getCause().getCause()));
-      verify(connection).rollback();
-      verify(connection, never()).setAutoCommit(true);
-      verify(connection, never()).commit();
-      if (rollbackFails) {
-        verify(connection).abort(any());
-        verify(connection, never()).close();
-        assertArrayEquals(new Throwable[]{rollbackFailure}, failure.getSuppressed());
-      } else {
-        verify(connection).close();
-      }
+    DataSource source = mock(DataSource.class);
+    when(source.getConnection()).thenReturn(connection);
+    PreparedStatement mutation = mockHardDelete(connection);
+    doThrow(new SQLException("Failed to return connection")).when(connection).close();
+    Metrics metrics = new Metrics(new MetricRegistry(), "");
+    try (MySqlNamedBlobDb db = hardDeleteDb(source, metrics)) {
+      DeleteResult result = db.delete(account.getName(), container.getName(), "name").get(5, TimeUnit.SECONDS);
+      assertEquals(Arrays.asList(new DeleteResult.BlobVersion(id, 2, false), new DeleteResult.BlobVersion(id, 1, false)),
+          result.getBlobVersions());
+      org.mockito.InOrder order = inOrder(mutation, connection);
+      order.verify(mutation).executeUpdate();
+      order.verify(connection).commit();
+      order.verify(connection).close();
+      verify(connection, never()).rollback();
+      assertEquals(1, metrics.connectionCloseErrorCount.getCount());
+      assertEquals(0, metrics.namedBlobDBDeleteErrorCount.getCount());
     }
   }
 
   @Test
-  public void testCleanupHandoffPrecedesNameMutationAndCommit() throws Exception {
+  public void testCommitFailureRemainsPrimaryWhenPoolReturnFails() throws Exception {
     Connection connection = mock(Connection.class);
-    PreparedStatement delete = mockNamedVersionsForDelete(connection);
-    MySqlNamedBlobDb.CleanupHandoff handoff = mock(MySqlNamedBlobDb.CleanupHandoff.class);
-    namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), "name", handoff)
-        .get(5, TimeUnit.SECONDS);
-    InOrder order = inOrder(connection, handoff, delete);
-    order.verify(connection).setAutoCommit(false);
-    order.verify(handoff).publish(eq(connection), eq(account.getId()), eq(container.getId()), eq("name"), anyList());
-    order.verify(delete).executeUpdate();
-    order.verify(connection).commit();
+    DataSource source = mock(DataSource.class);
+    when(source.getConnection()).thenReturn(connection);
+    mockHardDelete(connection);
+    SQLException commitFailure = new SQLException("Commit not acknowledged");
+    doThrow(commitFailure).when(connection).commit();
+    doThrow(new SQLException("Failed to return connection")).when(connection).close();
+    Metrics metrics = new Metrics(new MetricRegistry(), "");
+    try (MySqlNamedBlobDb db = hardDeleteDb(source, metrics)) {
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.delete(account.getName(), container.getName(), "name").get(5, TimeUnit.SECONDS),
+          e -> assertSame(commitFailure, e.getCause()));
+      verify(connection).rollback();
+      assertEquals(1, metrics.connectionCloseErrorCount.getCount());
+      assertEquals(1, metrics.namedBlobDBDeleteErrorCount.getCount());
+    }
   }
 
-  private PreparedStatement mockNamedVersionsForDelete(Connection connection) throws SQLException {
+  @Test
+  public void testRollbackFailureEvictsHikariConnection() throws Exception {
+    DataSource physicalSource = mock(DataSource.class);
+    Connection broken = mock(Connection.class);
+    Connection replacement = mock(Connection.class);
+    for (Connection physical : Arrays.asList(broken, replacement)) {
+      when(physical.getAutoCommit()).thenReturn(true);
+      when(physical.isValid(anyInt())).thenReturn(true);
+    }
+    when(physicalSource.getConnection()).thenReturn(broken, replacement);
+    AssertionError failure = new AssertionError("Transaction interrupted");
+    when(broken.prepareStatement(startsWith("SELECT"))).thenThrow(failure);
+    SQLException rollbackFailure = new SQLException("Rollback failed");
+    doThrow(rollbackFailure).when(broken).rollback();
+    try (HikariDataSource pool = new HikariDataSource()) {
+      pool.setDataSource(physicalSource);
+      pool.setMaximumPoolSize(1);
+      pool.setMinimumIdle(0);
+      pool.setInitializationFailTimeout(-1);
+      pool.setConnectionTimeout(3000);
+      try (MySqlNamedBlobDb db = hardDeleteDb(pool, new Metrics(new MetricRegistry(), ""))) {
+        TestUtils.assertException(ExecutionException.class,
+            () -> db.delete(account.getName(), container.getName(), "name").get(5, TimeUnit.SECONDS),
+            e -> assertSame(failure, e.getCause().getCause()));
+        assertArrayEquals(new Throwable[]{rollbackFailure}, failure.getSuppressed());
+        try (Connection next = pool.getConnection()) {
+          assertSame(replacement, next.unwrap(Connection.class));
+        }
+        verify(broken, never()).setAutoCommit(true);
+        verify(broken, never()).commit();
+      }
+    }
+  }
+
+  private MySqlNamedBlobDb hardDeleteDb(DataSource localSource, Metrics metrics) {
+    Properties props = new Properties();
+    props.setProperty(MySqlNamedBlobDbConfig.DB_INFO, buildSmallPoolConfig(1, 1, 1).dbInfo);
+    props.setProperty(MySqlNamedBlobDbConfig.ENABLE_HARD_DELETE, "true");
+    return new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(props)),
+        endpoint -> localDatacenter.equals(endpoint.getDatacenter()) ? localSource : mock(DataSource.class),
+        localDatacenter, metrics);
+  }
+
+  private PreparedStatement mockHardDelete(Connection connection) throws SQLException {
     PreparedStatement select = mock(PreparedStatement.class);
-    PreparedStatement delete = mock(PreparedStatement.class);
     ResultSet versions = mock(ResultSet.class);
-    when(dataSourceFactory.dataSources.get(localDatacenter).getConnection()).thenReturn(connection);
     when(connection.prepareStatement(startsWith("SELECT"))).thenReturn(select);
-    when(connection.prepareStatement(startsWith("UPDATE"))).thenReturn(delete);
-    when(connection.prepareStatement(startsWith("DELETE"))).thenReturn(delete);
     when(select.executeQuery()).thenReturn(versions);
     when(versions.next()).thenReturn(true, true, false);
     when(versions.getBytes(1)).thenReturn(Utils.base64DecodeUrlSafe(id));
     when(versions.getLong(2)).thenReturn(2L, 1L);
-    return delete;
+    PreparedStatement mutation = mock(PreparedStatement.class);
+    when(connection.prepareStatement(startsWith("DELETE"))).thenReturn(mutation);
+    return mutation;
   }
 
   /**
@@ -725,7 +748,7 @@ public class MySqlNamedBlobDbTest {
    * @param errorCode the expected {@link RestServiceErrorCode}.
    */
   private void checkErrorCode(Callable<Future<?>> callable, RestServiceErrorCode errorCode) throws Exception {
-    TestUtils.assertException(ExecutionException.class, () -> callable.call().get(5, TimeUnit.SECONDS), e -> {
+    TestUtils.assertException(ExecutionException.class, () -> callable.call().get(), e -> {
       RestServiceException rse = (RestServiceException) e.getCause();
       assertEquals("Unexpected error code for get after delete", errorCode, rse.getErrorCode());
     });
