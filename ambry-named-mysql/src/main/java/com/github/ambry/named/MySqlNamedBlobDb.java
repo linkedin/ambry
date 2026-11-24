@@ -54,6 +54,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -494,10 +495,36 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
+    return delete(accountName, containerName, blobName, null);
+  }
+
+  /**
+   * Hand ownership of the root and child cleanup to a durable worker. Unlike {@link #delete}, this path does not
+   * return IDs to dispatch a second, in-memory router delete.
+   */
+  CompletableFuture<Void> deleteWithCleanupHandoff(String accountName, String containerName, String blobName,
+      CleanupHandoff handoff) {
+    return delete(accountName, containerName, blobName, Objects.requireNonNull(handoff)).thenApply(ignored -> null);
+  }
+
+  @FunctionalInterface
+  interface CleanupHandoff {
+    /**
+     * Publish previously staged, immutable cleanup manifests for the exact locked versions, or throw if any is
+     * missing or mismatched. Use only this transaction: workers must not see the jobs until the name deletion
+     * commits. Do not fetch manifests over the network while holding the name locks. On a repeat, verify an
+     * existing handoff rather than issuing new deletes for a previously deleted version.
+     */
+    void publish(Connection connection, short accountId, short containerId, String name,
+        List<DeleteResult.BlobVersion> versions) throws SQLException;
+  }
+
+  private CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName,
+      CleanupHandoff handoff) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
       DeleteResult deleteResult =
-          run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
+          run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection, handoff);
       metricsRecoder.namedBlobDeleteTimeInMs.update(this.time.milliseconds() - startTime);
       return deleteResult;
     }, null, this.metricsRecoder.namedBlobDBDeleteErrorCount);
@@ -1163,7 +1190,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private DeleteResult run_delete_v2(String accountName, String containerName, String blobName, short accountId,
-      short containerId, Connection connection) throws Exception {
+      short containerId, Connection connection, CleanupHandoff handoff) throws Exception {
     String blobId;
     long version;
     Timestamp currentDeleteTime = null;
@@ -1198,6 +1225,13 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     } catch (SQLException e) {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
+    }
+    if (handoff != null) {
+      try {
+        handoff.publish(connection, accountId, containerId, blobName, Collections.unmodifiableList(blobVersions));
+      } catch (SQLException e) {
+        throw new RestServiceException("Could not record named blob cleanup", e, RestServiceErrorCode.ServiceUnavailable);
+      }
     }
     // only need to issue an update statement if the row was not already marked as deleted.
     if (!versionsToDelete.isEmpty()) {

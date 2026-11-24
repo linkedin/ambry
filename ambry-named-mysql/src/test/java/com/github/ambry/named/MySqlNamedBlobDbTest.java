@@ -62,6 +62,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.InOrder;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -122,6 +123,56 @@ public class MySqlNamedBlobDbTest {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
     dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
     checkErrorCode(() -> namedBlobDb.delete(account.getName(), container.getName(), "blobName"), RestServiceErrorCode.NotFound);
+  }
+
+  @Test
+  public void testCleanupHandoffFailureLeavesNamedVersionsIntact() throws Exception {
+    Connection connection = mock(Connection.class);
+    mockNamedVersionsForDelete(connection);
+    checkErrorCode(() -> namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), "name",
+        (transaction, accountId, containerId, name, versions) -> {
+          assertSame(connection, transaction);
+          assertEquals(account.getId(), accountId);
+          assertEquals(container.getId(), containerId);
+          assertEquals("name", name);
+          assertEquals(Arrays.asList(new DeleteResult.BlobVersion(id, 2, false),
+              new DeleteResult.BlobVersion(id, 1, false)), versions);
+          throw new SQLException("Incomplete manifest for the second version");
+        }), RestServiceErrorCode.ServiceUnavailable);
+    verify(connection).setAutoCommit(false);
+    verify(connection).rollback();
+    verify(connection, never()).commit();
+    verify(connection, never()).prepareStatement(startsWith("UPDATE"));
+    verify(connection, never()).prepareStatement(startsWith("DELETE"));
+  }
+
+  @Test
+  public void testCleanupHandoffPrecedesNameMutationAndCommit() throws Exception {
+    Connection connection = mock(Connection.class);
+    PreparedStatement delete = mockNamedVersionsForDelete(connection);
+    MySqlNamedBlobDb.CleanupHandoff handoff = mock(MySqlNamedBlobDb.CleanupHandoff.class);
+    namedBlobDb.deleteWithCleanupHandoff(account.getName(), container.getName(), "name", handoff)
+        .get(5, TimeUnit.SECONDS);
+    InOrder order = inOrder(connection, handoff, delete);
+    order.verify(connection).setAutoCommit(false);
+    order.verify(handoff).publish(eq(connection), eq(account.getId()), eq(container.getId()), eq("name"), anyList());
+    order.verify(delete).executeUpdate();
+    order.verify(connection).commit();
+  }
+
+  private PreparedStatement mockNamedVersionsForDelete(Connection connection) throws SQLException {
+    PreparedStatement select = mock(PreparedStatement.class);
+    PreparedStatement delete = mock(PreparedStatement.class);
+    ResultSet versions = mock(ResultSet.class);
+    when(dataSourceFactory.dataSources.get(localDatacenter).getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(startsWith("SELECT"))).thenReturn(select);
+    when(connection.prepareStatement(startsWith("UPDATE"))).thenReturn(delete);
+    when(connection.prepareStatement(startsWith("DELETE"))).thenReturn(delete);
+    when(select.executeQuery()).thenReturn(versions);
+    when(versions.next()).thenReturn(true, true, false);
+    when(versions.getBytes(1)).thenReturn(Utils.base64DecodeUrlSafe(id));
+    when(versions.getLong(2)).thenReturn(2L, 1L);
+    return delete;
   }
 
   /**
