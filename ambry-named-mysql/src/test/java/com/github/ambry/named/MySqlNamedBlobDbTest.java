@@ -63,6 +63,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.InOrder;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -131,19 +132,20 @@ public class MySqlNamedBlobDbTest {
     DataSource source = mock(DataSource.class);
     when(source.getConnection()).thenReturn(connection);
     PreparedStatement mutation = mockHardDelete(connection);
-    doThrow(new SQLException("Failed to return connection")).when(connection).close();
+    doThrow(new SQLException("Failed to return connection", "08006")).when(connection).close();
     Metrics metrics = new Metrics(new MetricRegistry(), "");
     try (MySqlNamedBlobDb db = hardDeleteDb(source, metrics)) {
       DeleteResult result = db.delete(account.getName(), container.getName(), "name").get(5, TimeUnit.SECONDS);
       assertEquals(Arrays.asList(new DeleteResult.BlobVersion(id, 2, false), new DeleteResult.BlobVersion(id, 1, false)),
           result.getBlobVersions());
-      org.mockito.InOrder order = inOrder(mutation, connection);
+      InOrder order = inOrder(mutation, connection);
       order.verify(mutation).executeUpdate();
       order.verify(connection).commit();
       order.verify(connection).close();
       verify(connection, never()).rollback();
       assertEquals(1, metrics.connectionCloseErrorCount.getCount());
       assertEquals(0, metrics.namedBlobDBDeleteErrorCount.getCount());
+      assertEquals(1, localConnectionFailures(metrics));
     }
   }
 
@@ -168,25 +170,90 @@ public class MySqlNamedBlobDbTest {
   }
 
   @Test
-  public void testRollbackFailureEvictsHikariConnection() throws Exception {
-    DataSource physicalSource = mock(DataSource.class);
+  public void testResetFailureAfterCommitEvictsHikariConnection() throws Exception {
     Connection broken = mock(Connection.class);
     Connection replacement = mock(Connection.class);
+    mockHardDelete(broken);
+    // A non-connection SQLState is not fatal to Hikari. The executor must evict before returning this connection.
+    doThrow(new SQLException("Autocommit reset failed", "HY000")).doNothing().when(broken).setAutoCommit(true);
+    Metrics metrics = new Metrics(new MetricRegistry(), "");
+    try (HikariDataSource pool = singleConnectionPool(broken, replacement);
+        MySqlNamedBlobDb db = hardDeleteDb(pool, metrics)) {
+      DeleteResult result = db.delete(account.getName(), container.getName(), "name").get(5, TimeUnit.SECONDS);
+      assertEquals(Arrays.asList(new DeleteResult.BlobVersion(id, 2, false), new DeleteResult.BlobVersion(id, 1, false)),
+          result.getBlobVersions());
+      InOrder order = inOrder(broken);
+      order.verify(broken).commit();
+      order.verify(broken).setAutoCommit(true);
+      verify(broken, never()).rollback();
+      try (Connection next = pool.getConnection()) {
+        assertSame(replacement, next.unwrap(Connection.class));
+        assertTrue(next.getAutoCommit());
+      }
+      assertEquals(0, metrics.namedBlobDBDeleteErrorCount.getCount());
+      assertEquals(1, metrics.connectionCloseErrorCount.getCount());
+      assertEquals(0, localConnectionFailures(metrics));
+    }
+  }
+
+  @Test
+  public void testResetFailureAfterRollbackPreservesCommitFailure() throws Exception {
+    Connection connection = mock(Connection.class);
+    DataSource source = mock(DataSource.class);
+    when(source.getConnection()).thenReturn(connection);
+    mockHardDelete(connection);
+    SQLException commitFailure = new SQLException("Commit not acknowledged");
+    SQLException resetFailure = new SQLException("Connection lost resetting autocommit", "08006");
+    doThrow(commitFailure).when(connection).commit();
+    doThrow(resetFailure).when(connection).setAutoCommit(true);
+    Metrics metrics = new Metrics(new MetricRegistry(), "");
+    try (MySqlNamedBlobDb db = hardDeleteDb(source, metrics)) {
+      TestUtils.assertException(ExecutionException.class,
+          () -> db.delete(account.getName(), container.getName(), "name").get(5, TimeUnit.SECONDS),
+          e -> assertSame(commitFailure, e.getCause()));
+      assertArrayEquals(new Throwable[]{resetFailure}, commitFailure.getSuppressed());
+      InOrder order = inOrder(connection);
+      order.verify(connection).rollback();
+      order.verify(connection).setAutoCommit(true);
+      order.verify(connection).abort(any());
+      verify(connection, never()).close();
+      assertEquals(1, metrics.namedBlobDBDeleteErrorCount.getCount());
+      assertEquals(1, metrics.connectionCloseErrorCount.getCount());
+      assertEquals(1, localConnectionFailures(metrics));
+    }
+  }
+
+  private long localConnectionFailures(Metrics metrics) {
+    return metrics.getMetricRegistry().getCounters()
+        .get(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDBConnectionFailureCount." + localDatacenter))
+        .getCount();
+  }
+
+  private HikariDataSource singleConnectionPool(Connection broken, Connection replacement) throws SQLException {
+    DataSource physicalSource = mock(DataSource.class);
     for (Connection physical : Arrays.asList(broken, replacement)) {
       when(physical.getAutoCommit()).thenReturn(true);
       when(physical.isValid(anyInt())).thenReturn(true);
     }
     when(physicalSource.getConnection()).thenReturn(broken, replacement);
+    HikariDataSource pool = new HikariDataSource();
+    pool.setDataSource(physicalSource);
+    pool.setMaximumPoolSize(1);
+    pool.setMinimumIdle(0);
+    pool.setInitializationFailTimeout(-1);
+    pool.setConnectionTimeout(3000);
+    return pool;
+  }
+
+  @Test
+  public void testRollbackFailureEvictsHikariConnection() throws Exception {
+    Connection broken = mock(Connection.class);
+    Connection replacement = mock(Connection.class);
     AssertionError failure = new AssertionError("Transaction interrupted");
     when(broken.prepareStatement(startsWith("SELECT"))).thenThrow(failure);
     SQLException rollbackFailure = new SQLException("Rollback failed");
     doThrow(rollbackFailure).when(broken).rollback();
-    try (HikariDataSource pool = new HikariDataSource()) {
-      pool.setDataSource(physicalSource);
-      pool.setMaximumPoolSize(1);
-      pool.setMinimumIdle(0);
-      pool.setInitializationFailTimeout(-1);
-      pool.setConnectionTimeout(3000);
+    try (HikariDataSource pool = singleConnectionPool(broken, replacement)) {
       try (MySqlNamedBlobDb db = hardDeleteDb(pool, new Metrics(new MetricRegistry(), ""))) {
         TestUtils.assertException(ExecutionException.class,
             () -> db.delete(account.getName(), container.getName(), "name").get(5, TimeUnit.SECONDS),

@@ -730,9 +730,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
      *       exception" class (08001/08003/08004/08006/08007/08S01).</li>
      * </ol>
      *
-     * <p>The walk traverses both {@link Throwable#getCause()} and {@link SQLException#getNextException()}
-     * so wrapped/chained variants (e.g. RuntimeException-wrapped, Hikari-wrapped, batch error chains)
-     * are detected. SQLSTATE "40*" (transaction rollback), "57*" (operator intervention), and other
+     * <p>The walk includes causes, chained SQL exceptions and suppressed cleanup failures.
+     * SQLSTATE "40*" (transaction rollback), "57*" (operator intervention), and other
      * adjacent classes are intentionally NOT counted — those are not connection failures.
      */
     private static boolean isConnectionFailure(Throwable t) {
@@ -764,6 +763,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         if (cause != null) {
           stack.push(cause);
         }
+        Collections.addAll(stack, cur.getSuppressed());
       }
       return false;
     }
@@ -799,6 +799,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     private <T> T runTransaction(boolean autoCommit, TransactionGeneric<T> transaction) throws Exception {
       Connection connection = dataSource.getConnection();
       boolean returnToPool = true;
+      Throwable operationFailure = null;
       try {
         if (!autoCommit) {
           connection.setAutoCommit(false);
@@ -809,38 +810,62 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         }
         return result;
       } catch (Exception | Error failure) {
+        operationFailure = failure;
         if (!autoCommit) {
           try {
             connection.rollback();
           } catch (Exception | Error rollbackFailure) {
             // Returning an unresolved transaction to the pool could commit it when autocommit is restored.
             returnToPool = false;
+            discardConnection(connection, rollbackFailure);
             if (failure != rollbackFailure) {
               failure.addSuppressed(rollbackFailure);
-            }
-            try {
-              if (dataSource instanceof HikariDataSource) {
-                ((HikariDataSource) dataSource).evictConnection(connection);
-              } else {
-                connection.abort(Runnable::run);
-              }
-            } catch (Exception | Error discardFailure) {
-              if (failure != discardFailure) {
-                failure.addSuppressed(discardFailure);
-              }
             }
           }
         }
         throw failure;
       } finally {
         if (returnToPool) {
+          returnConnection(connection, autoCommit, operationFailure);
+        }
+      }
+    }
+
+    private void returnConnection(Connection connection, boolean autoCommit, Throwable operationFailure) {
+      try {
+        if (!autoCommit) {
           try {
-            connection.close();
-          } catch (Exception | Error closeFailure) {
-            // Returning the connection cannot change the transaction outcome reported to the caller.
-            metrics.connectionCloseErrorCount.inc();
-            logger.error("Failed to return a named blob DB connection in {}", datacenter, closeFailure);
+            connection.setAutoCommit(true);
+          } catch (Exception | Error resetFailure) {
+            // Hikari can recycle a connection even when a reset inside close() fails.
+            discardConnection(connection, resetFailure);
+            throw resetFailure;
           }
+        }
+        connection.close();
+      } catch (Exception | Error cleanupFailure) {
+        metrics.connectionCloseErrorCount.inc();
+        if (operationFailure == null) {
+          if (isConnectionFailure(cleanupFailure)) {
+            connectionFailureCount.inc();
+          }
+        } else if (operationFailure != cleanupFailure) {
+          operationFailure.addSuppressed(cleanupFailure);
+        }
+        logger.error("Failed to return a named blob DB connection in {}", datacenter, cleanupFailure);
+      }
+    }
+
+    private void discardConnection(Connection connection, Throwable failure) {
+      try {
+        if (dataSource instanceof HikariDataSource) {
+          ((HikariDataSource) dataSource).evictConnection(connection);
+        } else {
+          connection.abort(Runnable::run);
+        }
+      } catch (Exception | Error discardFailure) {
+        if (failure != discardFailure) {
+          failure.addSuppressed(discardFailure);
         }
       }
     }
