@@ -73,12 +73,44 @@ definitions, and run the application smoke test.
 
 The database operations alone are not safe to activate. In addition to the DELETE and cleaner gates below:
 
-- Make ordinary GET and all LIST paths honor `retirement_fenced` on the **selected version**, irrespective of the
-  frontend clock. Do not discard the newest tombstone before selecting a version: that can expose older data. Preserve
-  include-deleted GET access to the exact retired root.
-- Before permitting failover, verify each promotion candidate has applied all acknowledged retirement transactions
-  (receipts, pages and fenced rows), not just the schema and trigger. Do not promote or serve from a candidate whose
-  applied position cannot be proven sufficient.
+- After verifying the migration on every read endpoint, enable `mysql.named.blob.honor.retirement.fence` on every
+  frontend before publishing any retirements. It defaults to `false`, so readers can run against the original schema.
+  When enabled, ordinary and include-expired GET return `Deleted` for a fenced version even if the frontend clock is
+  behind. Include-deleted and include-all GET return the selected root. Prefix and no-prefix LIST hide a fenced
+  selection without falling back to an older live row. A PUT whose version does not sort above the name's fence
+  returns `ServiceUnavailable` without inserting and increments `FenceAwarePutVersionRejectedCount`. Retry a
+  generated-version PUT once the frontend clock catches up.
+- Use a direct, single-host Connector/J writer with automatic reconnect disabled and no intermediary that multiplexes
+  backend sessions. Fence-aware PUT rejects multi-host drivers and reconnect modes rather than allowing the probe and
+  INSERT to run on different sessions. With the flag on, the factory configures all writable endpoint pools, including
+  remote pools used for GET fallback, to reset isolation to `REPEATABLE READ`. It also sets that isolation explicitly
+  on each new physical connection to clear any next-transaction override from server initialization. Leave the isolation
+  setting unspecified (`TRANSACTION_NONE`) or choose `TRANSACTION_REPEATABLE_READ`; other values prevent pool startup.
+  Do not set a next-transaction override after initialization: the session default does not reveal it.
+- Fence-aware PUT requires autocommit on and no active transaction. Before the non-upsert existence check or any
+  INSERT, it reads the server's autocommit and isolation settings and checks the transaction status in the same
+  response: `START TRANSACTION` leaves autocommit on. A rejected checkout is discarded without committing, resetting
+  autocommit, or returning its transaction to readers. At `READ COMMITTED`
+  the fence lookup can finish before a concurrent publication commits, even though the insert itself waits.
+  Even without retirements, concurrent PUTs to the same name or adjacent new names can deadlock in the same index gap.
+  On a confirmed InnoDB deadlock (`1213/40001`), an upsert retries the same conditional INSERT once, then returns
+  `ServiceUnavailable` if it deadlocks again. A create-only victim returns `ServiceUnavailable` immediately: its
+  existence check is stale. Neither a lock timeout nor an unknown commit outcome is retried. Monitor
+  `FenceAwarePutDeadlockCount` for every victim, including recovered upserts. `NamedBlobDBInsertErrorCount` counts
+  the deadlock only if it is returned to the caller. Monitor `FenceAwarePutSessionRejectedCount` for rejected checkouts.
+  `ConnectionCloseErrorCount` counts failed cleanup steps, not distinct checkouts. If reset and discard both fail,
+  one checkout increments it twice, even with the flag off. Ambry logs discard failures it sees; physical close
+  failures handled inside Hikari are not included.
+- These checks cover named PUT only. Before activating manifest publication, verify its required transaction state
+  on a fixed physical session as well; publication requires autocommit **off**. Publication and page reads still use
+  JDBC isolation getters. Do not activate those callers with a pool that can report cached rather than server state.
+- Every serving endpoint, cross-datacenter GET fallback, and promotion candidate must have applied all acknowledged
+  retirement transactions, not just the migration. A local `NotFound` can send GET to another datacenter. If an
+  endpoint cannot prove its applied position, exclude it from reads, retries, and promotion.
+- Before enabling the flag, compare flag-on and flag-off LIST plans and first- and later-page latency on representative
+  large containers, with and without a prefix. Check the deployed SQL option, rows examined, and query timeouts. Also
+  measure PUT latency, deadlocks and 503s under same-name and sequential-name contention. The integration fixture is not
+  a load test.
 - Admit only namespaces that will stay within the version limit **with cleanup excluded**. PUT keeps older versions:
   an initial permanent PUT and 32 overwrites can leave 33 unfenced rows. Even below the limit, a live non-composite
   version cannot supply a composite manifest. Restrict writes accordingly or reconcile history safely first.
@@ -91,8 +123,9 @@ every runner, for both stale cleanup and purge. Drain in-flight requests, cleane
 router deletes. Either path can send a root to the router, which can eagerly delete shared children. If the exclusion
 cannot be guaranteed (for example, the runner cannot resolve the account), keep the cleaner stopped.
 
-On rollback, disable staging and publication but retain the DELETE gate, cleaner exclusion, database fence, index, and
-published evidence. Do not send affected traffic or cleaner work to an old binary that cannot honor those gates.
+On rollback, disable staging and publication but retain fence-aware reads, the DELETE gate, cleaner exclusion, database
+fence, index, and published evidence. Do not send affected traffic or cleaner work to an old binary that cannot honor
+those gates.
 
 This store does not retire raw parent IDs, establish exclusive ownership of chunks, schedule cleanup, or reclaim space.
 Those steps and an ownership policy are required before wiring the public DELETE path.

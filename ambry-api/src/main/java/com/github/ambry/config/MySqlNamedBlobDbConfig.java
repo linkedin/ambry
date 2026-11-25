@@ -38,6 +38,7 @@ public class MySqlNamedBlobDbConfig {
   public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
   public static final String LIST_NAMED_BLOBS_SQL_OPTION = "list.named.blobs.sql.option";
   public static final String ENABLE_HARD_DELETE = PREFIX + "enable.hard.delete";
+  public static final String HONOR_RETIREMENT_FENCE = PREFIX + "honor.retirement.fence";
   public static final String ENABLE_CERTIFICATE_BASED_AUTHENTICATION =
       PREFIX + "enable.certificate.based.authentication";
   public static final String SSL_MODE = PREFIX + "ssl.mode";
@@ -175,6 +176,11 @@ public class MySqlNamedBlobDbConfig {
   @Config(ENABLE_HARD_DELETE)
   public final boolean enableHardDelete;
 
+  /** Honor retirement on named GET, LIST and PUT. Requires the migration on all named-blob endpoints. */
+  @Config(HONOR_RETIREMENT_FENCE)
+  @Default("false")
+  public final boolean honorRetirementFence;
+
   /**
    * True to use certificate based authentication for MYSQL connections. SSL certificates must be configured in the
    * configuration files. The keys are the same as keys in {@link SSLConfig}. We are expecting the following keys
@@ -219,6 +225,7 @@ public class MySqlNamedBlobDbConfig {
         verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
             TransactionIsolationLevel.TRANSACTION_NONE);
     this.enableHardDelete = verifiableProperties.getBoolean(ENABLE_HARD_DELETE, false);
+    this.honorRetirementFence = verifiableProperties.getBoolean(HONOR_RETIREMENT_FENCE, false);
     this.enableCertificateBasedAuthentication =
         verifiableProperties.getBoolean(ENABLE_CERTIFICATE_BASED_AUTHENTICATION, false);
     this.sslConfig = this.enableCertificateBasedAuthentication ? new SSLConfig(verifiableProperties) : null;

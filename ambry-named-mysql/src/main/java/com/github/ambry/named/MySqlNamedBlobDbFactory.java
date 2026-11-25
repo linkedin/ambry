@@ -85,10 +85,23 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
     hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
     hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
     hikariConfig.addDataSourceProperty("useServerPrepStmts", "true");
-    if (!config.transactionIsolationLevel.equals(TransactionIsolationLevel.TRANSACTION_NONE)) {
-      hikariConfig.setTransactionIsolation(config.transactionIsolationLevel.name());
-    }
+    configureIsolation(hikariConfig, config.transactionIsolationLevel,
+        config.honorRetirementFence && dbEndpoint.isWriteable());
     hikariConfig.setMetricRegistry(metricRegistry);
     return new HikariDataSource(hikariConfig);
+  }
+
+  static void configureIsolation(HikariConfig pool, TransactionIsolationLevel isolation, boolean fenceAwareWriter) {
+    if (fenceAwareWriter) {
+      if (isolation != TransactionIsolationLevel.TRANSACTION_NONE
+          && isolation != TransactionIsolationLevel.TRANSACTION_REPEATABLE_READ) {
+        throw new IllegalArgumentException("Fence-aware writer pools require TRANSACTION_REPEATABLE_READ");
+      }
+      pool.setTransactionIsolation(TransactionIsolationLevel.TRANSACTION_REPEATABLE_READ.name());
+      // Hikari can skip its JDBC setter when the session default matches, leaving a one-transaction override intact.
+      pool.setConnectionInitSql("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    } else if (isolation != TransactionIsolationLevel.TRANSACTION_NONE) {
+      pool.setTransactionIsolation(isolation.name());
+    }
   }
 }

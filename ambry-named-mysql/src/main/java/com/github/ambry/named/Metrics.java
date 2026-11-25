@@ -61,6 +61,9 @@ public class Metrics {
   public final Counter namedBlobDBListErrorCount;
   public final Counter namedBlobDBDeleteErrorCount;
   public final Counter namedBlobDBInsertErrorCount;
+  final Counter fenceAwarePutDeadlockCount;
+  final Counter fenceAwarePutSessionRejectedCount;
+  final Counter fenceAwarePutVersionRejectedCount;
   public final Counter namedBlobDBUpdateErrorCount;
   final Counter connectionCloseErrorCount;
 
@@ -128,6 +131,12 @@ public class Metrics {
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBDeleteErrorCount"));
     namedBlobDBInsertErrorCount =
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBInsertErrorCount"));
+    fenceAwarePutDeadlockCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "FenceAwarePutDeadlockCount"));
+    fenceAwarePutSessionRejectedCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "FenceAwarePutSessionRejectedCount"));
+    fenceAwarePutVersionRejectedCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "FenceAwarePutVersionRejectedCount"));
     namedBlobDBUpdateErrorCount =
         metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, prefix + "NamedBlobDBUpdateErrorCount"));
     connectionCloseErrorCount =

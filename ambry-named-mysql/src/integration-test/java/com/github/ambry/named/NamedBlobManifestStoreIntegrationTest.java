@@ -16,19 +16,23 @@ import java.sql.SQLException;
 import java.sql.SQLDataException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Scanner;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import org.json.JSONArray;
 import org.junit.Test;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
@@ -38,13 +42,20 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.Page;
+import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.mysql.cj.jdbc.MysqlDataSource;
+import com.zaxxer.hikari.HikariDataSource;
 
 public class NamedBlobManifestStoreIntegrationTest {
   private static final short ACCOUNT = 17;
@@ -94,16 +105,155 @@ public class NamedBlobManifestStoreIntegrationTest {
   }
 
   private static MySqlNamedBlobDb namedDb(DataSource db) throws Exception {
+    return namedDb(db, new Properties(), SystemTime.getInstance());
+  }
+
+  private static MySqlNamedBlobDb namedDb(DataSource db, Properties properties, Time time) throws Exception {
+    properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO,
+        "[{\"url\":\"jdbc:mysql://[::1]\",\"datacenter\":\"local\",\"isWriteable\":true,"
+            + "\"username\":\"unused\",\"password\":\"unused\",\"sslMode\":\"NONE\"}]");
+    return new MySqlNamedBlobDb(fixtureAccounts(), new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
+        endpoint -> db, "local", new Metrics(new MetricRegistry(), ""), time);
+  }
+
+  private static InMemAccountService fixtureAccounts() throws Exception {
     InMemAccountService accounts = new InMemAccountService(false, false);
     accounts.updateAccounts(Collections.singletonList(new AccountBuilder(ACCOUNT, "account", Account.AccountStatus.ACTIVE)
         .addOrUpdateContainer(new ContainerBuilder(CONTAINER, "container", Container.ContainerStatus.ACTIVE, "",
             ACCOUNT).build()).build()));
-    Properties properties = new Properties();
-    properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO,
-        "[{\"url\":\"jdbc:mysql://[::1]\",\"datacenter\":\"local\",\"isWriteable\":true,"
-            + "\"username\":\"unused\",\"password\":\"unused\",\"sslMode\":\"NONE\"}]");
-    return new MySqlNamedBlobDb(accounts, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
-        endpoint -> db, "local", new Metrics(new MetricRegistry(), ""));
+    return accounts;
+  }
+
+  @Test
+  public void testFenceAwareGetWithSlowFrontend() throws Exception {
+    withDatabase((db, writer) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      long now = System.currentTimeMillis();
+      long expires = now + TimeUnit.DAYS.toMillis(1);
+      long fence = writer.put(NamedBlobRecord.forPut("account", "container", NAME, root.getID(), expires, 1),
+          NamedBlobState.READY, false).get(10, TimeUnit.SECONDS).getInsertedRecord().getVersion();
+      retire(writer, Collections.singletonList(stage(writer, NAME, fence, root, 1,
+          Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator())));
+      // A lower-version insert after publication must not become the visible root.
+      insertNamed(db, 6, blob(BlobId.BlobDataType.METADATA), NamedBlobState.READY);
+      MockTime frontend = new MockTime(now - TimeUnit.SECONDS.toMillis(5));
+      String replacement = blob(BlobId.BlobDataType.METADATA).getID();
+      NamedBlobRecord put = NamedBlobRecord.forPut("account", "container", NAME, replacement, expires, 1);
+      Properties props = new Properties();
+      try (MySqlNamedBlobDb legacy = namedDb(db, props, frontend)) {
+        assertEquals(root.getID(), legacy.get("account", "container", NAME).get(10, TimeUnit.SECONDS).getBlobId());
+        try {
+          legacy.put(put, NamedBlobState.READY, false).get(10, TimeUnit.SECONDS);
+          fail("Legacy non-upsert must conflict while the deletion timestamp appears to be in the future");
+        } catch (ExecutionException e) {
+          assertEquals(RestServiceErrorCode.Conflict, ((RestServiceException) e.getCause()).getErrorCode());
+        }
+      }
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+      try (MySqlNamedBlobDb reader = namedDb(db, props, frontend)) {
+        for (GetOption option : Arrays.asList(GetOption.None, GetOption.Include_Expired_Blobs)) {
+          try {
+            reader.get("account", "container", NAME, option, false).get(10, TimeUnit.SECONDS);
+            fail("Expected Deleted for " + option);
+          } catch (ExecutionException e) {
+            assertEquals(RestServiceErrorCode.Deleted, ((RestServiceException) e.getCause()).getErrorCode());
+          }
+        }
+        for (GetOption option : Arrays.asList(GetOption.Include_Deleted_Blobs, GetOption.Include_All)) {
+          NamedBlobRecord record = reader.get("account", "container", NAME, option, false).get(10, TimeUnit.SECONDS);
+          assertEquals(root.getID(), record.getBlobId());
+          assertEquals(fence, record.getVersion());
+        }
+        for (boolean upsert : Arrays.asList(false, true)) {
+          try {
+            PutResult result = reader.put(put, NamedBlobState.READY, upsert).get(10, TimeUnit.SECONDS);
+            fail("Acknowledged version " + result.getInsertedRecord().getVersion() + " behind fence " + fence);
+          } catch (ExecutionException e) {
+            assertEquals(RestServiceErrorCode.ServiceUnavailable, ((RestServiceException) e.getCause()).getErrorCode());
+          }
+        }
+        // Supplied versions use the same floor, including equality and the first phase of a permanent PUT.
+        try {
+          reader.put(new NamedBlobRecord("account", "container", NAME, replacement, -1, fence),
+              NamedBlobState.IN_PROGRESS, true).get(10, TimeUnit.SECONDS);
+          fail("A version equal to the fence must be rejected before insert");
+        } catch (ExecutionException e) {
+          assertEquals(RestServiceErrorCode.ServiceUnavailable, ((RestServiceException) e.getCause()).getErrorCode());
+        }
+        assertEquals(2, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2"));
+        frontend.setCurrentMilliseconds(System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(5));
+        long accepted = reader.put(put, NamedBlobState.READY, false).get(10, TimeUnit.SECONDS)
+            .getInsertedRecord().getVersion();
+        assertTrue(accepted > fence);
+        assertEquals(replacement, reader.get("account", "container", NAME).get(10, TimeUnit.SECONDS).getBlobId());
+        assertPage(reader, null, null, NAME, accepted, null);
+      }
+    });
+  }
+
+  @Test
+  public void testListAcrossRetirementFenceMigration() throws Exception {
+    BlobId root = blob(BlobId.BlobDataType.METADATA);
+    withDatabase(db -> {
+      insertNamed(db, 1, root, NamedBlobState.READY);
+      for (int option = 2; option <= 4; option++) {
+        Properties props = new Properties();
+        props.setProperty(MySqlNamedBlobDbConfig.LIST_NAMED_BLOBS_SQL_OPTION, Integer.toString(option));
+        try (MySqlNamedBlobDb reader = namedDb(db, props, SystemTime.getInstance())) {
+          assertEquals(root.getID(), reader.get("account", "container", NAME).get(10, TimeUnit.SECONDS).getBlobId());
+          for (String prefix : Arrays.asList(null, "folder/")) {
+            assertPage(reader, prefix, null, NAME, 1, null);
+          }
+        }
+      }
+    }, (db, writer) -> {
+      String first = "folder/A", elapsed = "folder/B", legacy = "folder/C", last = "folder/Z";
+      insertNamed(db, first, 1, root, NamedBlobState.READY);
+      insertNamed(db, elapsed, 1, root, NamedBlobState.READY);
+      insertNamed(db, elapsed, 2, root, NamedBlobState.READY);
+      insertNamed(db, legacy, 1, root, NamedBlobState.READY);
+      insertNamed(db, legacy, 2, root, NamedBlobState.READY);
+      insertNamed(db, 2, root, NamedBlobState.READY);
+      insertNamed(db, last, 1, root, NamedBlobState.READY);
+      sql(db, "UPDATE named_blobs_v2 SET retirement_fenced=TRUE WHERE blob_name='folder/B' AND version=2");
+      sql(db, "UPDATE named_blobs_v2 SET deleted_ts='2000-01-01' WHERE blob_name='folder/C' AND version=2");
+      // The writer clock is ahead of LIST's database clock. deleted_ts alone would pass the outer filter.
+      try (Connection c = db.getConnection(); Statement s = c.createStatement()) {
+        s.execute("SET SESSION timestamp = UNIX_TIMESTAMP() + 3600");
+        s.executeUpdate("UPDATE named_blobs_v2 SET retirement_fenced=TRUE WHERE blob_name='folder/MixedCase'"
+            + " AND version=2");
+      }
+      for (int option = 2; option <= 4; option++) {
+        Properties props = new Properties();
+        props.setProperty(MySqlNamedBlobDbConfig.LIST_NAMED_BLOBS_SQL_OPTION, Integer.toString(option));
+        props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+        try (MySqlNamedBlobDb reader = namedDb(db, props, SystemTime.getInstance())) {
+          for (String prefix : Arrays.asList(null, "folder/")) {
+            // Only legacy no-prefix options 2/3 fall back past an ordinary, unfenced expired row.
+            boolean legacyFallback = prefix == null && option != 4;
+            assertPage(reader, prefix, null, first, 1, legacyFallback ? legacy : last);
+            if (legacyFallback) {
+              assertPage(reader, prefix, legacy, legacy, 1, last);
+            }
+            assertPage(reader, prefix, last, last, 1, null);
+          }
+          insertNamed(db, 3, root, NamedBlobState.READY);
+          for (String prefix : Arrays.asList(null, "folder/")) {
+            assertPage(reader, prefix, NAME, NAME, 3, last);
+          }
+          sql(db, "DELETE FROM named_blobs_v2 WHERE version=3");
+        }
+      }
+    });
+  }
+
+  private static void assertPage(MySqlNamedBlobDb reader, String prefix, String token, String name, long version,
+      String next) throws Exception {
+    Page<NamedBlobRecord> page = reader.list("account", "container", prefix, token, 1).get(10, TimeUnit.SECONDS);
+    assertEquals(1, page.getEntries().size());
+    assertEquals(name, page.getEntries().get(0).getBlobName());
+    assertEquals(version, page.getEntries().get(0).getVersion());
+    assertEquals(next, page.getNextPageToken());
   }
 
   private static String stage(MySqlNamedBlobDb db, String name, long version, BlobId root, int count,
@@ -294,6 +444,322 @@ public class NamedBlobManifestStoreIntegrationTest {
   }
 
   @Test
+  public void testFenceAwarePutDuringPublication() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 100, root, NamedBlobState.READY);
+      List<String> jobs = Collections.singletonList(stage(named, NAME, 100, root, 1,
+          Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator()));
+      NamedBlobRecord lower = new NamedBlobRecord("account", "container", NAME, root.getID(), -1, 50);
+      Properties props = new Properties();
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+      DataSource checkouts = mock(DataSource.class);
+      try (Connection publisher = db.getConnection(); Connection rr = db.getConnection();
+          Connection rc = db.getConnection();
+          MySqlNamedBlobDb writer = namedDb(checkouts, props, SystemTime.getInstance())) {
+        rr.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        rc.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        when(checkouts.getConnection()).thenReturn(rr, rc);
+        publisher.setAutoCommit(false);
+        NamedBlobManifestStore.retire(publisher, ACCOUNT, CONTAINER, NAME, jobs);
+        CompletableFuture<PutResult> waiting = writer.put(lower, NamedBlobState.READY, true);
+        awaitCount(publisher, "SELECT COUNT(*) FROM performance_schema.data_lock_waits"
+            + " WHERE BLOCKING_THREAD_ID=PS_CURRENT_THREAD_ID()", 1);
+        // A different checkout at RC must fail before the publisher releases the insert gap.
+        assertTrue(unavailable(writer.put(lower, NamedBlobState.READY, true)).getMessage().contains("REPEATABLE READ"));
+        publisher.commit();
+        assertTrue(unavailable(waiting).getMessage().contains("newer than the retirement fence"));
+      }
+      assertEquals(0, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2 WHERE version=50"));
+    });
+  }
+
+  @Test
+  public void testFirstPutIsolationAfterConnectionInit() throws Exception {
+    withDatabase((db, named) -> {
+      sql(db, "CREATE TABLE put_isolation (level_name VARCHAR(32) NOT NULL) ENGINE=InnoDB");
+      sql(db, "CREATE TRIGGER record_put_isolation BEFORE INSERT ON named_blobs_v2 FOR EACH ROW"
+          + " INSERT INTO put_isolation SELECT ISOLATION_LEVEL FROM performance_schema.events_transactions_current"
+          + " WHERE THREAD_ID=PS_CURRENT_THREAD_ID()");
+      // Simulate a server logon hook on each new physical connection without changing global CI server settings.
+      DataSource physical = mock(DataSource.class);
+      when(physical.getConnection()).thenAnswer(invocation -> {
+        Connection c = db.getConnection();
+        try (Statement s = c.createStatement()) {
+          s.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+          s.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
+        }
+        return c;
+      });
+      Properties props = new Properties();
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+      for (boolean initializeFenceAwarePool : Arrays.asList(false, true)) {
+        try (HikariDataSource pool = new HikariDataSource()) {
+          pool.setDataSource(physical);
+          pool.setMaximumPoolSize(1);
+          MySqlNamedBlobDbFactory.configureIsolation(pool, TransactionIsolationLevel.TRANSACTION_REPEATABLE_READ,
+              initializeFenceAwarePool);
+          try (MySqlNamedBlobDb writer = namedDb(pool, props, SystemTime.getInstance())) {
+            NamedBlobRecord record = NamedBlobRecord.forPut("account", "container", NAME + initializeFenceAwarePool,
+                blob(BlobId.BlobDataType.METADATA).getID(), -1, 1);
+            writer.put(record, NamedBlobState.READY, true).get(10, TimeUnit.SECONDS);
+          }
+          String expected = initializeFenceAwarePool ? "REPEATABLE READ" : "READ COMMITTED";
+          assertEquals(1, scalar(db, "SELECT COUNT(*) FROM put_isolation WHERE level_name='" + expected + "'"));
+          sql(db, "DELETE FROM put_isolation");
+        }
+      }
+    });
+  }
+
+  @Test
+  public void testFenceAwarePutChecksServerInsteadOfCachedSessionSettings() throws Exception {
+    withDatabase((db, named) -> {
+      MysqlDataSource physical;
+      try (Connection c = db.getConnection()) {
+        physical = source(c.getCatalog());
+      }
+      physical.setUseConfigs("maxPerformance");
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 7, root, NamedBlobState.READY);
+      String job = stage(named, NAME, 7, root, 1,
+          Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator());
+      sql(db, "CREATE TABLE eviction_sentinel (id INT PRIMARY KEY) ENGINE=InnoDB");
+      Properties props = new Properties();
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+      try (HikariDataSource pool = repeatableReadPool(physical, 1);
+          MySqlNamedBlobDb writer = namedDb(pool, props, SystemTime.getInstance())) {
+        NamedBlobRecord put = NamedBlobRecord.forPut("account", "container", NAME,
+            blob(BlobId.BlobDataType.METADATA).getID(), -1, 1);
+        // Change only this pooled session, not the test server's defaults or Connector/J's local state.
+        for (String settings : Arrays.asList("autocommit=1, transaction_isolation='READ-COMMITTED'",
+            "autocommit=0, transaction_isolation='REPEATABLE-READ'")) {
+          int rejectedId;
+          try (Connection c = pool.getConnection(); Statement s = c.createStatement()) {
+            s.execute("SET SESSION " + settings);
+            rejectedId = scalar(c, "SELECT CONNECTION_ID()");
+            assertTrue(c.getAutoCommit());
+            assertEquals(Connection.TRANSACTION_REPEATABLE_READ, c.getTransactionIsolation());
+            assertEquals(0, scalar(c, "SELECT @@session.autocommit=1 AND @@session.transaction_isolation='REPEATABLE-READ'"));
+            if (scalar(c, "SELECT @@session.autocommit") == 0) {
+              assertEquals(0, scalar(c, "SELECT retirement_fenced FROM named_blobs_v2 WHERE version=7"));
+              s.executeUpdate("INSERT INTO eviction_sentinel VALUES (1)");
+            }
+          }
+          assertTrue(unavailable(writer.put(put, NamedBlobState.READY, false)).getMessage().contains("REPEATABLE READ"));
+          try (Connection next = pool.getConnection()) {
+            assertNotEquals(rejectedId, scalar(next, "SELECT CONNECTION_ID()"));
+          }
+        }
+        retire(named, Collections.singletonList(job));
+        try {
+          writer.get("account", "container", NAME).get(10, TimeUnit.SECONDS);
+          fail("A subsequent GET must not reuse a pre-retirement snapshot");
+        } catch (ExecutionException e) {
+          assertEquals(RestServiceErrorCode.Deleted, ((RestServiceException) e.getCause()).getErrorCode());
+        }
+        assertTrue(writer.list("account", "container", null, null, 1).get(10, TimeUnit.SECONDS).getEntries().isEmpty());
+      }
+      assertEquals(0, scalar(db, "SELECT COUNT(*) FROM eviction_sentinel"));
+      assertEquals(1, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2"));
+    });
+  }
+
+  @Test
+  public void testFenceAwarePutRejectsActiveTransaction() throws Exception {
+    checkActiveTransactionRejected(false);
+  }
+
+  @Test
+  public void testFenceAwarePutRejectsActiveTransactionWithUncachedServerPrepares() throws Exception {
+    checkActiveTransactionRejected(true);
+  }
+
+  private void checkActiveTransactionRejected(boolean serverPrepares) throws Exception {
+    withDatabase((db, named) -> {
+      MysqlDataSource physical;
+      try (Connection c = db.getConnection()) {
+        physical = source(c.getCatalog());
+      }
+      physical.setUseServerPrepStmts(serverPrepares);
+      physical.setCachePrepStmts(false);
+      sql(db, "CREATE TABLE transaction_sentinel (id INT PRIMARY KEY) ENGINE=InnoDB");
+      Properties props = new Properties();
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+      try (HikariDataSource pool = repeatableReadPool(physical, 1);
+          MySqlNamedBlobDb writer = namedDb(pool, props, SystemTime.getInstance())) {
+        MySqlNamedBlobDbFactory.configureIsolation(pool, TransactionIsolationLevel.TRANSACTION_REPEATABLE_READ, true);
+        int rejectedId;
+        try (Connection c = pool.getConnection(); Statement s = c.createStatement()) {
+          s.execute("START TRANSACTION");
+          s.executeUpdate("INSERT INTO transaction_sentinel VALUES (1)");
+          assertEquals(1, scalar(c, "SELECT @@session.autocommit=1 AND @@session.transaction_isolation='REPEATABLE-READ'"));
+          rejectedId = scalar(c, "SELECT CONNECTION_ID()");
+        }
+        NamedBlobRecord put = NamedBlobRecord.forPut("account", "container", NAME,
+            blob(BlobId.BlobDataType.METADATA).getID(), -1, 1);
+        assertTrue(unavailable(writer.put(put, NamedBlobState.READY, true)).getMessage().contains("active transaction"));
+        try (Connection next = pool.getConnection()) {
+          assertNotEquals(rejectedId, scalar(next, "SELECT CONNECTION_ID()"));
+        }
+        assertEquals(0, scalar(db, "SELECT COUNT(*) FROM transaction_sentinel"));
+        assertEquals(0, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2"));
+        writer.put(put, NamedBlobState.READY, true).get(10, TimeUnit.SECONDS);
+        assertEquals(1, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2"));
+      }
+    });
+  }
+
+  @Test
+  public void testFenceAwarePutRejectsSwitchableSessions() throws Exception {
+    withDatabase((db, named) -> {
+      Properties props = new Properties();
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+      try (Connection c = db.getConnection()) {
+        for (boolean loadBalanced : Arrays.asList(true, false)) {
+          MysqlDataSource physical = source(c.getCatalog());
+          if (loadBalanced) {
+            physical.setURL(physical.getURL().replace("jdbc:mysql://", "jdbc:mysql:loadbalance://"));
+            physical.setLoadBalanceAutoCommitStatementThreshold(1);
+          } else {
+            physical.setAutoReconnect(true);
+          }
+          try (HikariDataSource pool = repeatableReadPool(physical, 1);
+              MySqlNamedBlobDb writer = namedDb(pool, props, SystemTime.getInstance())) {
+            NamedBlobRecord put = NamedBlobRecord.forPut("account", "container", NAME,
+                blob(BlobId.BlobDataType.METADATA).getID(), -1, 1);
+            assertTrue(unavailable(writer.put(put, NamedBlobState.READY, true)).getMessage().contains("fixed"));
+          }
+        }
+        assertEquals(0, scalar(c, "SELECT COUNT(*) FROM named_blobs_v2"));
+      }
+    });
+  }
+
+  private static HikariDataSource repeatableReadPool(DataSource source, int size) {
+    HikariDataSource pool = new HikariDataSource();
+    pool.setDataSource(source);
+    pool.setMaximumPoolSize(size);
+    pool.setTransactionIsolation("TRANSACTION_REPEATABLE_READ");
+    return pool;
+  }
+
+  @Test
+  public void testFactoryAppliesFencePolicyToWritableEndpoints() throws Exception {
+    MysqlDataSource db = source("");
+    Properties props = new Properties();
+    props.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "local");
+    props.setProperty(MySqlNamedBlobDbConfig.DB_INFO, "[]");
+    for (boolean enabled : Arrays.asList(false, true)) {
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, Boolean.toString(enabled));
+      MySqlNamedBlobDbFactory factory = new MySqlNamedBlobDbFactory(new VerifiableProperties(props),
+          new MetricRegistry(), new InMemAccountService(false, false));
+      for (boolean writable : Arrays.asList(false, true)) {
+        DbEndpoint endpoint = new DbEndpoint(db.getURL(), "remote", writable, db.getUser(), db.getPassword());
+        try (HikariDataSource pool = factory.buildDataSource(endpoint)) {
+          assertEquals(enabled && writable ? "TRANSACTION_REPEATABLE_READ" : null, pool.getTransactionIsolation());
+          assertEquals(enabled && writable ? "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ" : null,
+              pool.getConnectionInitSql());
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testFenceAwareUpsertsRetryDeadlockOnAdjacentNames() throws Exception {
+    checkContendingPuts(Arrays.asList("a", "b"), true);
+  }
+
+  @Test
+  public void testFenceAwareCreateOnlyDoesNotReplayAfterDeadlock() throws Exception {
+    checkContendingPuts(Arrays.asList("a", "a"), false);
+  }
+
+  private void checkContendingPuts(List<String> names, boolean isUpsert) throws Exception {
+    withDatabase((db, named) -> {
+      Properties props = new Properties();
+      props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+      // Pause both inserts after the fence lookup but before either can insert into the shared gap.
+      sql(db, "CREATE TRIGGER wait_for_puts BEFORE INSERT ON named_blobs_v2 FOR EACH ROW BEGIN"
+          + " IF GET_LOCK(DATABASE(),30) <> 1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='barrier timeout'; END IF;"
+          + " DO RELEASE_LOCK(DATABASE()); END");
+      MysqlDataSource physical = (MysqlDataSource) db;
+      DbEndpoint endpoint = new DbEndpoint(physical.getURL(), "local", true, physical.getUser(), physical.getPassword());
+      props.setProperty(MySqlNamedBlobDbConfig.LOCAL_POOL_SIZE, "2");
+      props.setProperty(MySqlNamedBlobDbConfig.DB_INFO, new JSONArray().put(endpoint.toJson()).toString());
+      props.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "local");
+      MetricRegistry registry = new MetricRegistry();
+      AtomicLong now = new AtomicLong(System.currentTimeMillis());
+      Time clock = mock(Time.class);
+      when(clock.milliseconds()).thenAnswer(invocation -> now.get());
+      MySqlNamedBlobDbFactory factory = new MySqlNamedBlobDbFactory(new VerifiableProperties(props), registry,
+          fixtureAccounts(), clock, "");
+      try (Connection gate = db.getConnection(); MySqlNamedBlobDb writer = factory.getNamedBlobDb()) {
+        assertEquals(1, scalar(gate, "SELECT GET_LOCK(DATABASE(),0)"));
+        List<CompletableFuture<PutResult>> puts = new ArrayList<>();
+        for (String name : names) {
+          puts.add(writer.put(NamedBlobRecord.forPut("account", "container", name,
+              blob(BlobId.BlobDataType.METADATA).getID(), -1, 1), NamedBlobState.READY, isUpsert));
+        }
+        awaitCount(gate, "SELECT COUNT(*) FROM performance_schema.metadata_locks WHERE OBJECT_TYPE='USER LEVEL LOCK'"
+            + " AND OBJECT_NAME=DATABASE() AND LOCK_STATUS='PENDING'", 2);
+        // Both versions are bound. Any version generated after releasing the lock must exceed this boundary.
+        long boundary = MySqlNamedBlobDb.buildVersion(new MockTime(now.incrementAndGet()));
+        now.incrementAndGet();
+        assertEquals(1, scalar(gate, "SELECT RELEASE_LOCK(DATABASE())"));
+        List<NamedBlobRecord> acknowledged = new ArrayList<>();
+        int victims = 0;
+        for (int i = 0; i < puts.size(); i++) {
+          try {
+            NamedBlobRecord record = puts.get(i).get(10, TimeUnit.SECONDS).getInsertedRecord();
+            assertEquals(names.get(i), record.getBlobName());
+            acknowledged.add(record);
+          } catch (ExecutionException e) {
+            RestServiceException failure = (RestServiceException) e.getCause();
+            assertEquals(RestServiceErrorCode.ServiceUnavailable, failure.getErrorCode());
+            assertEquals(1213, ((SQLException) failure.getCause()).getErrorCode());
+            victims++;
+          }
+        }
+        assertEquals(isUpsert ? 0 : 1, victims);
+        assertEquals(1, registry.getCounters().get(MetricRegistry.name(MySqlNamedBlobDb.class,
+            "FenceAwarePutDeadlockCount")).getCount());
+        assertEquals(victims, registry.getCounters().get(MetricRegistry.name(MySqlNamedBlobDb.class,
+            "NamedBlobDBInsertErrorCount")).getCount());
+        try (Statement read = gate.createStatement();
+            ResultSet stored = read.executeQuery("SELECT blob_name, version FROM named_blobs_v2 ORDER BY blob_name")) {
+          for (NamedBlobRecord record : acknowledged) {
+            assertTrue("Missing acknowledged PUT", stored.next());
+            assertEquals(record.getBlobName(), stored.getString("blob_name"));
+            long version = stored.getLong("version");
+            assertEquals(record.getVersion(), version);
+            assertTrue("Retry generated a new version", version < boundary);
+          }
+          assertFalse("Unexpected stored PUT", stored.next());
+        }
+      }
+    });
+  }
+
+  private static RestServiceException unavailable(CompletableFuture<PutResult> put) throws Exception {
+    try {
+      put.get(10, TimeUnit.SECONDS);
+      throw new AssertionError("PUT must not be acknowledged");
+    } catch (ExecutionException e) {
+      RestServiceException failure = (RestServiceException) e.getCause();
+      assertEquals(RestServiceErrorCode.ServiceUnavailable, failure.getErrorCode());
+      return failure;
+    }
+  }
+
+  private static void awaitCount(Connection c, String query, int count) throws SQLException {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (scalar(c, query) < count) {
+      assertTrue("Did not observe " + count + " lock waiter(s)", System.nanoTime() < deadline);
+    }
+  }
+
+  @Test
   public void testRetirementLocksGapForReplacement() throws Exception {
     withDatabase((db, named) -> {
       BlobId root = blob(BlobId.BlobDataType.METADATA);
@@ -426,7 +892,13 @@ public class NamedBlobManifestStoreIntegrationTest {
   }
 
   private static int scalar(DataSource db, String sql) throws SQLException {
-    try (Connection c = db.getConnection(); Statement s = c.createStatement(); ResultSet r = s.executeQuery(sql)) {
+    try (Connection c = db.getConnection()) {
+      return scalar(c, sql);
+    }
+  }
+
+  private static int scalar(Connection c, String sql) throws SQLException {
+    try (Statement s = c.createStatement(); ResultSet r = s.executeQuery(sql)) {
       assertTrue(r.next());
       return r.getInt(1);
     }
@@ -476,12 +948,17 @@ public class NamedBlobManifestStoreIntegrationTest {
   }
 
   private static void insertNamed(DataSource db, long version, BlobId root, NamedBlobState state) throws SQLException {
+    insertNamed(db, NAME, version, root, state);
+  }
+
+  private static void insertNamed(DataSource db, String name, long version, BlobId root, NamedBlobState state)
+      throws SQLException {
     try (Connection c = db.getConnection(); PreparedStatement s = c.prepareStatement(
         "INSERT INTO named_blobs_v2 (account_id,container_id,blob_name,version,blob_id,blob_state)"
             + " VALUES (?,?,?,?,?,?)")) {
       s.setShort(1, ACCOUNT);
       s.setShort(2, CONTAINER);
-      s.setString(3, NAME);
+      s.setString(3, name);
       s.setLong(4, version);
       s.setBytes(5, root.toBytes());
       s.setInt(6, state.ordinal());
