@@ -22,6 +22,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetryExecutor;
 import com.github.ambry.commons.RetryPolicies;
@@ -33,9 +34,13 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.jdbc.ConnectionImpl;
+import com.mysql.cj.jdbc.JdbcConnection;
 import com.zaxxer.hikari.HikariDataSource;
 import java.io.Closeable;
 import java.io.IOException;
@@ -45,6 +50,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLNonTransientConnectionException;
 import java.sql.SQLTransientConnectionException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -53,6 +59,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -110,9 +117,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   /**
    * Select a record that matches a blob name (lookup by primary key).
    */
-  private static final String GET_QUERY =
-      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION, DELETED_TS, DIGEST,
-          NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
+  private final String getQuery;
 
   private final String LIST_WITH_PREFIX_SQL;
   private final String LIST_ALL_SQL;
@@ -121,9 +126,14 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * Attempt to insert a new mapping into the database. The 'modified_ts' column in the DB will be auto-populated on
    * the server side
    */
-  private static final String INSERT_QUERY =
-      String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s, %10$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  private static final String INSERT_COLUMNS =
+      String.format("INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
           NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS, VERSION, BLOB_STATE, BLOB_SIZE, DIGEST);
+  private static final String INSERT_QUERY = INSERT_COLUMNS + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+  // Check the database fence in the INSERT itself, including for upserts that skip GET.
+  private static final String FENCE_AWARE_INSERT_QUERY = INSERT_COLUMNS + " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?"
+      + " FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM " + NAMED_BLOBS_V2 + " WHERE " + PK_MATCH
+      + " AND retirement_fenced = TRUE AND version >= ?)";
 
   /**
    * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.
@@ -187,6 +197,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       String localDatacenter, Metrics metricRecorder, Time time) {
     this.accountService = accountService;
     this.config = config;
+    this.getQuery = String.format("SELECT %s, %s, %s, %s%s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1",
+        BLOB_ID, VERSION, DELETED_TS, DIGEST, config.honorRetirementFence ? ", retirement_fenced" : "",
+        NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
     this.LIST_WITH_PREFIX_SQL = getListWithPrefixSQLStatement(config);
     this.LIST_ALL_SQL = getListAllSQLStatement(config);
     this.localDatacenter = localDatacenter;
@@ -233,6 +246,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "     AND blob_name LIKE ? " // 3
             + "     AND blob_name >= ? " // 4
             + "     AND (deleted_ts IS NULL OR deleted_ts > %2$s) "
+            + (config.honorRetirementFence ? " AND retirement_fenced = FALSE " : "")
             + " ), "
             + " BlobsMaxVersion AS ( "
             + "   SELECT blob_name, MAX(version) as version "
@@ -253,56 +267,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + " LIMIT ?", STATE_MATCH, CURRENT_TIME); // 9
         // @formatter:on
       case 3:
-        /**
-         * List named-blobs query, given a prefix.
-         * This query uses a subquery to get the max version of a given blob name.
-         * 1. The subquery returns the max version whose blob_state is ready, even if it's deleted.
-         * 2. The outer query select goes through all the (blob_name, version) combination and only returns the one when
-         *    version is the max version from the subquery and not deleted.
-         * This list sql statement uses subquery instead of CTE and inner join so it should be more efficient.
-         */
-        // @formatter:off
-        return String.format(""
-            + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
-            + "FROM named_blobs_v2 candidate "
-            + "WHERE candidate.account_id = ? "
-            + "    AND candidate.container_id = ? "
-            + "    AND candidate.%1$s"
-            + "    AND candidate.blob_name LIKE ? "
-            + "    AND candidate.blob_name >= ? "
-            + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
-            + "    AND candidate.version = ( "
-            + "        SELECT MAX(latest.version) "
-            + "        FROM named_blobs_v2 latest "
-            + "        WHERE latest.account_id = ? "
-            + "            AND latest.container_id = ? "
-            + "            AND latest.blob_name = candidate.blob_name "
-            + "            AND latest.%1$s"
-            + "    ) "
-            + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
-      // @formatter:on
       case 4:
-        /**
-         * List named-blobs query, given a prefix.
-         * Correlated-subquery form (same shape as option 3) with an explicit ORDER BY. The prior option-4
-         * form used MAX(version) OVER (PARTITION BY blob_name); that window plan buffers/materializes the
-         * ENTIRE prefix range (Sort -> Window-with-buffering -> Materialize) before LIMIT can apply, so its
-         * cost is O(container) regardless of page size. On large containers this ran for many seconds and
-         * was connection-killed by the EI watchdog at ~6s. This correlated form early-terminates: the PK
-         * (account_id, container_id, blob_name, version) range scan walks blob_name in order, probes an
-         * indexed MAX(version) per candidate, and LIMIT stops after one page -> O(page).
-         *
-         * Correctness invariant — same as options 2 and 3:
-         * 1. The subquery MAX(version) is computed over all blob_state=READY rows for a given blob_name,
-         *    INCLUDING rows with a non-null deleted_ts.
-         * 2. The deleted_ts predicate is applied on the OUTER select, so if the latest READY version of a
-         *    blob has expired or been soft-deleted the blob is hidden entirely; we never surface a stale
-         *    older version.
-         *
-         * ORDER BY candidate.blob_name makes pagination deterministic. Because the PK range scan already
-         * yields blob_name in order, the optimizer satisfies it without an extra Sort. Binds SEVEN
-         * parameters — keep constructListQueryWithPrefixV4 in lockstep.
-         */
+        // MAX includes every READY version; only the winning row is tested for expiry or retirement.
+        // The correlated lookup allows LIMIT to stop the PK scan without materializing the entire prefix range.
         // @formatter:off
         return String.format(""
             + "SELECT candidate.blob_name, candidate.blob_id, candidate.version, candidate.deleted_ts, candidate.blob_size, candidate.modified_ts "
@@ -313,6 +280,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "    AND candidate.blob_name LIKE ? "
             + "    AND candidate.blob_name >= ? "
             + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + (config.honorRetirementFence ? " AND candidate.retirement_fenced = FALSE " : "")
             + "    AND candidate.version = ( "
             + "        SELECT MAX(latest.version) "
             + "        FROM named_blobs_v2 latest "
@@ -321,7 +289,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "            AND latest.blob_name = candidate.blob_name "
             + "            AND latest.%1$s"
             + "    ) "
-            + "ORDER BY candidate.blob_name "
+            + (config.listNamedBlobsSQLOption == 4 || config.honorRetirementFence ? "ORDER BY candidate.blob_name " : "")
             + "LIMIT ?", STATE_MATCH, CURRENT_TIME);
         // @formatter:on
       default:
@@ -363,10 +331,14 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "(SELECT account_id, container_id, blob_name, max(version) as version "
             + "FROM named_blobs_v2 "
             + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
+            // A fenced version must participate in MAX even after its timestamp elapses, or an older row can win.
+            + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S"
+            + (config.honorRetirementFence ? " OR retirement_fenced = TRUE" : "")
+            + ") "
             + "        GROUP BY account_id, container_id, blob_name) t2 "
             + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
             + "WHERE "
+            + (config.honorRetirementFence ? "t1.retirement_fenced = FALSE AND " : "")
             + "  CASE "
             + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
             + "     ELSE 1 "
@@ -399,6 +371,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             + "    AND candidate.%1$s " // blob_state = x
             + "    AND ( ? IS NULL OR candidate.blob_name >= ? ) " // 3, 4 (pageToken twice)
             + "    AND (candidate.deleted_ts IS NULL OR candidate.deleted_ts > %2$s) "
+            + (config.honorRetirementFence ? " AND candidate.retirement_fenced = FALSE " : "")
             + "    AND candidate.version = ( "
             + "        SELECT MAX(latest.version) "
             + "        FROM named_blobs_v2 latest "
@@ -456,6 +429,9 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
           logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}', isUpsert='{}'", accountId,
               containerId, record.getBlobName(), isUpsert);
+          if (config.honorRetirementFence) {
+            requireFenceAwarePutSession(connection);
+          }
           if (!isUpsert) {
             NamedBlobRecord recordCurrent = null;
             try {
@@ -475,7 +451,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
                   record.getContainerName(), record.getBlobName());
             }
           }
-          PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
+          PutResult putResult = run_put_v2(record, state, accountId, containerId, connection, isUpsert);
           metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
           return putResult;
         }, null, this.metricsRecoder.namedBlobDBInsertErrorCount);
@@ -491,6 +467,28 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           metricsRecoder.namedTtlupdateTimeInMs.update(this.time.milliseconds() - startTime);
           return result;
         }, null, this.metricsRecoder.namedBlobDBUpdateErrorCount);
+  }
+
+  /** Stages descriptors decoded from a single immutable metadata blob without locking or deleting its name. */
+  CompletableFuture<String> stageDeleteManifest(String accountName, String containerName, String blobName, long version,
+      BlobId root, int childCount, Iterator<? extends StoreKey> children) {
+    return executeTransactionAsync(accountName, containerName, false,
+        (account, container, connection) -> NamedBlobManifestStore.capture(connection, account, container, blobName,
+            version, root, childCount, children), null, metricsRecoder.namedBlobDBDeleteErrorCount);
+  }
+
+  /** Publish this exact sealed manifest set atomically with soft retirement. Never returns IDs for a router cascade. */
+  CompletableFuture<Void> retireWithManifests(String accountName, String containerName, String blobName,
+      List<String> manifestIds) {
+    NamedBlobManifestStore.checkManifestCount(manifestIds);
+    List<String> ids = new ArrayList<>(manifestIds);
+    return executeTransactionAsync(accountName, containerName, false, (account, container, connection) -> {
+      if (config.enableHardDelete) {
+        throw new UnsupportedOperationException("Manifest retirement requires named soft delete");
+      }
+      NamedBlobManifestStore.retire(connection, account, container, blobName, ids);
+      return null;
+    }, null, metricsRecoder.namedBlobDBDeleteErrorCount);
   }
 
   @Override
@@ -807,6 +805,10 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         if (!autoCommit) {
           connection.commit();
         }
+      } catch (RejectedPutSession failure) {
+        // Never reset or recycle an unknown transaction. Closing normally may return its snapshot to a reader.
+        discardConnection(connection, failure);
+        throw failure;
       } catch (Exception | Error failure) {
         if (!autoCommit) {
           try {
@@ -860,6 +862,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           connection.abort(Runnable::run);
         }
       } catch (Exception | Error discardFailure) {
+        metrics.connectionCloseErrorCount.inc();
+        logger.error("Failed to discard a named blob DB connection in {}", datacenter, discardFailure);
         if (failure != discardFailure) {
           failure.addSuppressed(discardFailure);
         }
@@ -918,7 +922,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   private NamedBlobRecord run_get_v2(String accountName, String containerName, String blobName, GetOption option,
       short accountId, short containerId, Connection connection) throws Exception {
     String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
+    try (PreparedStatement statement = connection.prepareStatement(getQuery)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, blobName);
@@ -934,6 +938,11 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         long version = resultSet.getLong(2);
         Timestamp deletionTime = resultSet.getTimestamp(3);
         String digest = resultSet.getString(4);
+        if (config.honorRetirementFence && resultSet.getBoolean(5)
+            && option != GetOption.Include_Deleted_Blobs && option != GetOption.Include_All) {
+          throw buildException("GET: Named version is retired", RestServiceErrorCode.Deleted, accountName,
+              containerName, blobName);
+        }
         long currentTime = this.time.milliseconds();
         if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOrExpiredOptions.contains(option)) {
           throw buildException("GET: Blob is not available due to it is deleted or expired",
@@ -975,10 +984,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
             constructListQueryWithPrefixV2(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
             break;
           case 3:
-            constructListQueryWithPrefixV3(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
-            break;
           case 4:
-            constructListQueryWithPrefixV4(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
+            constructCorrelatedPrefixQuery(statement, accountId, containerId, blobNamePrefix, pageToken, maxKeysValue);
             break;
           default:
             throw new IllegalStateException(
@@ -1088,7 +1095,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   /**
-   * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 3
+   * Construct the correlated prefix LIST for SQL options 3 and 4.
    * @param statement The {@link PreparedStatement} to set the parameters on.
    * @param accountId The account id
    * @param containerId The container id
@@ -1097,7 +1104,7 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
    * @param maxKeysValue The max key to return
    * @throws SQLException
    */
-  private void constructListQueryWithPrefixV3(PreparedStatement statement, short accountId, short containerId,
+  private void constructCorrelatedPrefixQuery(PreparedStatement statement, short accountId, short containerId,
       String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);
@@ -1108,36 +1115,56 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
     statement.setInt(7, maxKeysValue + 1);
   }
 
-  /**
-   * Construct a list query statement with prefix when {@link MySqlNamedBlobDbConfig#listNamedBlobsSQLOption} is 4.
-   * Option 4 now uses a correlated subquery (see {@link #getListWithPrefixSQLStatement}) and binds seven
-   * parameters: (account_id, container_id, blob_name LIKE prefix%, blob_name >= cursor, account_id,
-   * container_id, LIMIT). Params 5 and 6 feed the inner MAX(version) subquery. Identical to
-   * {@link #constructListQueryWithPrefixV3}.
-   * @param statement The {@link PreparedStatement} to set the parameters on.
-   * @param accountId The account id
-   * @param containerId The container id
-   * @param blobNamePrefix The blobname prefix
-   * @param pageToken The page token
-   * @param maxKeysValue The max key to return
-   * @throws SQLException
-   */
-  private void constructListQueryWithPrefixV4(PreparedStatement statement, short accountId, short containerId,
-      String blobNamePrefix, String pageToken, int maxKeysValue) throws SQLException {
-    statement.setInt(1, accountId);
-    statement.setInt(2, containerId);
-    statement.setString(3, blobNamePrefix + "%");
-    statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
-    statement.setInt(5, accountId);
-    statement.setInt(6, containerId);
-    statement.setInt(7, maxKeysValue + 1);
+  private static final class RejectedPutSession extends RestServiceException {
+    RejectedPutSession(String message, Throwable cause) {
+      super(message, cause, RestServiceErrorCode.ServiceUnavailable);
+    }
+  }
+
+  private void requireFenceAwarePutSession(Connection connection) throws RejectedPutSession {
+    try {
+      // Inspect the actual Connector/J delegate, not the URL or a multi-host proxy's currently selected host.
+      JdbcConnection driver = connection.unwrap(JdbcConnection.class);
+      if (!(driver instanceof ConnectionImpl) || driver.isProxySet()
+          || driver.getPropertySet().getBooleanProperty(PropertyKey.autoReconnect).getValue()
+          || driver.getPropertySet().getBooleanProperty(PropertyKey.autoReconnectForPools).getValue()
+          || driver.getPropertySet().getBooleanProperty(PropertyKey.reconnectAtTxEnd).getValue()) {
+        throw rejectPutSession("PUT: Fence-aware insert requires a fixed physical MySQL session", null);
+      }
+      // JDBC getters can be cached; read the state that governs the insert's locks.
+      try (Statement check = connection.createStatement()) {
+        check.setFetchSize(0);
+        try (ResultSet settings = check.executeQuery("SELECT @@session.autocommit, @@session.transaction_isolation")) {
+          if (!settings.next()) {
+            throw new SQLException("MySQL did not return the writer session settings");
+          }
+          if (!settings.getBoolean(1) || !"REPEATABLE-READ".equals(settings.getString(2))) {
+            throw rejectPutSession("PUT: Fence-aware insert requires autocommit and REPEATABLE READ", null);
+          }
+          // START TRANSACTION leaves autocommit on. Read this response's status before cleanup can clear it.
+          if (driver.getSession().getServerSession().inTransactionOnServer()) {
+            throw rejectPutSession("PUT: Fence-aware insert cannot use an active transaction", null);
+          }
+        }
+      }
+    } catch (SQLException e) {
+      metricsRecoder.namedBlobDBInsertErrorCount.inc();
+      throw rejectPutSession("PUT: Could not verify the writer session", e);
+    }
+  }
+
+  private RejectedPutSession rejectPutSession(String reason, Throwable cause) {
+    metricsRecoder.fenceAwarePutSessionRejectedCount.inc();
+    logger.warn(reason, cause);
+    return new RejectedPutSession(reason, cause);
   }
 
   private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId,
-      Connection connection) throws Exception {
+      Connection connection, boolean isUpsert) throws Exception {
     String query = "";
     NamedBlobRecord updatedRecord;
-    try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
+    try (PreparedStatement statement =
+        connection.prepareStatement(config.honorRetirementFence ? FENCE_AWARE_INSERT_QUERY : INSERT_QUERY)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, record.getBlobName());
@@ -1153,12 +1180,44 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setInt(7, state.ordinal());
       statement.setLong(8, record.getBlobSize());
       statement.setString(9, record.getDigest());
+      if (config.honorRetirementFence) {
+        statement.setInt(10, accountId);
+        statement.setInt(11, containerId);
+        statement.setString(12, record.getBlobName());
+        statement.setLong(13, newVersion);
+      }
       updatedRecord = new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
           record.getBlobId(), record.getExpirationTimeMs(), newVersion);
       query = statement.toString();
       logger.debug("Putting blob name in MySql. Query {}", query);
       metricsRecoder.namedBlobInsertRate.mark();
-      statement.executeUpdate();
+      int inserted;
+      for (int attempt = 0; ; attempt++) {
+        try {
+          inserted = statement.executeUpdate();
+          break;
+        } catch (SQLException e) {
+          if (!config.honorRetirementFence || e.getErrorCode() != 1213 || !"40001".equals(e.getSQLState())) {
+            throw e;
+          }
+          metricsRecoder.fenceAwarePutDeadlockCount.inc();
+          // Reuse the bound version and fence predicate only after a confirmed rollback. A create-only PUT
+          // must not replay its INSERT on the strength of a now-stale existence check.
+          if (isUpsert && attempt == 0) {
+            continue;
+          }
+          metricsRecoder.namedBlobDBInsertErrorCount.inc();
+          logger.warn("MySQL rolled back a fence-aware PUT (1213/40001)", e);
+          throw new RestServiceException("PUT: InnoDB rolled back a deadlocked insert", e,
+              RestServiceErrorCode.ServiceUnavailable);
+        }
+      }
+      if (inserted == 0 && config.honorRetirementFence) {
+        metricsRecoder.fenceAwarePutVersionRejectedCount.inc();
+        throw buildException("PUT: Version must be newer than the retirement fence",
+            RestServiceErrorCode.ServiceUnavailable, record.getAccountName(), record.getContainerName(),
+            record.getBlobName());
+      }
     } catch (SQLException e) {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;

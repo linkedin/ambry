@@ -34,6 +34,11 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.mysql.cj.NativeSession;
+import com.mysql.cj.jdbc.ConnectionImpl;
+import com.mysql.cj.jdbc.JdbcConnection;
+import com.mysql.cj.jdbc.JdbcPropertySetImpl;
+import com.mysql.cj.protocol.ServerSession;
 import com.zaxxer.hikari.HikariDataSource;
 import java.io.IOException;
 import java.sql.Connection;
@@ -42,6 +47,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLNonTransientConnectionException;
 import java.sql.SQLTransientConnectionException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -124,6 +130,73 @@ public class MySqlNamedBlobDbTest {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
     dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
     checkErrorCode(() -> namedBlobDb.delete(account.getName(), container.getName(), "blobName"), RestServiceErrorCode.NotFound);
+  }
+
+  @Test
+  public void testFenceAwarePutRetriesOnlyConfirmedDeadlocksOnce() throws Exception {
+    Properties props = new Properties();
+    props.setProperty(MySqlNamedBlobDbConfig.DB_INFO, buildSmallPoolConfig(1, 1, 1).dbInfo);
+    props.setProperty(MySqlNamedBlobDbConfig.HONOR_RETIREMENT_FENCE, "true");
+    DataSource source = mock(DataSource.class);
+    Connection connection = mock(Connection.class);
+    PreparedStatement insert = mock(PreparedStatement.class);
+    Statement probe = mock(Statement.class);
+    ResultSet settings = mock(ResultSet.class);
+    ConnectionImpl driver = mock(ConnectionImpl.class);
+    NativeSession session = mock(NativeSession.class);
+    when(driver.getSession()).thenReturn(session);
+    when(session.getServerSession()).thenReturn(mock(ServerSession.class));
+    when(connection.unwrap(JdbcConnection.class)).thenReturn(driver);
+    when(driver.getPropertySet()).thenReturn(new JdbcPropertySetImpl());
+    when(source.getConnection()).thenReturn(connection);
+    when(connection.createStatement()).thenReturn(probe);
+    when(probe.executeQuery(startsWith("SELECT"))).thenReturn(settings);
+    when(settings.next()).thenReturn(true);
+    when(settings.getBoolean(1)).thenReturn(true);
+    when(settings.getString(2)).thenReturn("REPEATABLE-READ");
+    when(connection.prepareStatement(startsWith("INSERT"))).thenReturn(insert);
+    SQLException lostReply = new SQLException("Connection lost waiting for INSERT reply", "08S01");
+    SQLException timeout = new SQLException("Lock wait timeout", "40001", 1205);
+    SQLException deadlock = new SQLException("Deadlock victim", "40001", 1213);
+    when(insert.executeUpdate()).thenThrow(lostReply, timeout, deadlock, deadlock, deadlock).thenReturn(0);
+    Metrics metrics = new Metrics(new MetricRegistry(), "");
+    try (MySqlNamedBlobDb db = new MySqlNamedBlobDb(accountService,
+        new MySqlNamedBlobDbConfig(new VerifiableProperties(props)), endpoint -> source, localDatacenter,
+        metrics)) {
+      NamedBlobRecord record = NamedBlobRecord.forPut(account.getName(), container.getName(), "name", id, -1, 1);
+      for (SQLException original : Arrays.asList(lostReply, timeout)) {
+        TestUtils.assertException(ExecutionException.class, () -> db.put(record, NamedBlobState.READY, true)
+            .get(5, TimeUnit.SECONDS), e -> assertSame(original, e.getCause()));
+      }
+      verify(insert, times(2)).executeUpdate();
+      TestUtils.assertException(ExecutionException.class, () -> db.put(record, NamedBlobState.READY, true)
+          .get(5, TimeUnit.SECONDS), e -> {
+            RestServiceException unavailable = (RestServiceException) e.getCause();
+            assertEquals(RestServiceErrorCode.ServiceUnavailable, unavailable.getErrorCode());
+            assertSame(deadlock, unavailable.getCause());
+          });
+      verify(insert, times(4)).executeUpdate();
+      assertEquals(3, metrics.namedBlobDBInsertErrorCount.getCount());
+      checkErrorCode(() -> db.put(record, NamedBlobState.READY, true), RestServiceErrorCode.ServiceUnavailable);
+      assertEquals(1, metrics.fenceAwarePutVersionRejectedCount.getCount());
+      when(settings.getString(2)).thenReturn("READ-COMMITTED");
+      SQLException discardFailure = new SQLException("Connection abort failed");
+      doThrow(discardFailure).when(connection).abort(any());
+      TestUtils.assertException(ExecutionException.class, () -> db.put(record, NamedBlobState.READY, true)
+          .get(5, TimeUnit.SECONDS), e -> {
+            assertEquals(RestServiceErrorCode.ServiceUnavailable, ((RestServiceException) e.getCause()).getErrorCode());
+            assertArrayEquals(new Throwable[]{discardFailure}, e.getCause().getSuppressed());
+          });
+      verify(connection).abort(any());
+      verify(connection, times(4)).close();
+      verify(connection, never()).setAutoCommit(true);
+      assertEquals(1, metrics.connectionCloseErrorCount.getCount());
+      verify(insert, times(6)).executeUpdate();
+      verify(source, times(5)).getConnection();
+      assertEquals(3, metrics.namedBlobDBInsertErrorCount.getCount());
+      assertEquals(3, metrics.fenceAwarePutDeadlockCount.getCount());
+      assertEquals(1, metrics.fenceAwarePutSessionRejectedCount.getCount());
+    }
   }
 
   @Test
