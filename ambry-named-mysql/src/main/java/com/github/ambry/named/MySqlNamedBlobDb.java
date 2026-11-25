@@ -36,6 +36,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import com.zaxxer.hikari.HikariDataSource;
 import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Connection;
@@ -729,9 +730,8 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
      *       exception" class (08001/08003/08004/08006/08007/08S01).</li>
      * </ol>
      *
-     * <p>The walk traverses both {@link Throwable#getCause()} and {@link SQLException#getNextException()}
-     * so wrapped/chained variants (e.g. RuntimeException-wrapped, Hikari-wrapped, batch error chains)
-     * are detected. SQLSTATE "40*" (transaction rollback), "57*" (operator intervention), and other
+     * <p>The walk includes causes, chained SQL exceptions and suppressed cleanup failures.
+     * SQLSTATE "40*" (transaction rollback), "57*" (operator intervention), and other
      * adjacent classes are intentionally NOT counted — those are not connection failures.
      */
     private static boolean isConnectionFailure(Throwable t) {
@@ -763,44 +763,15 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         if (cause != null) {
           stack.push(cause);
         }
+        Collections.addAll(stack, cur.getSuppressed());
       }
       return false;
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
         Callback<T> callback) {
-      final long enqueueTimeMs = System.currentTimeMillis();
-      try {
-        executor.submit(() -> {
-          enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
-          try (Connection connection = dataSource.getConnection()) {
-            T result;
-            if (autoCommit) {
-              result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-            } else {
-              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-              connection.setAutoCommit(false);
-              try {
-                result = transaction.run(container.getParentAccountId(), container.getId(), connection);
-                connection.commit();
-              } catch (Exception e) {
-                connection.rollback();
-                throw e;
-              } finally {
-                connection.setAutoCommit(true);
-              }
-            }
-            callback.onCompletion(result, null);
-          } catch (Exception e) {
-            if (isConnectionFailure(e)) {
-              connectionFailureCount.inc();
-            }
-            callback.onCompletion(null, e);
-          }
-        });
-      } catch (RejectedExecutionException e) {
-        rejectTransaction(callback, e);
-      }
+      executeTransactionGeneric(autoCommit,
+          connection -> transaction.run(container.getParentAccountId(), container.getId(), connection), callback);
     }
 
     <T> void executeTransactionGeneric(boolean autoCommit, TransactionGeneric<T> transaction, Callback<T> callback) {
@@ -808,33 +779,90 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
       try {
         executor.submit(() -> {
           enqueueWaitTimeInMs.update(System.currentTimeMillis() - enqueueTimeMs);
-          try (Connection connection = dataSource.getConnection()) {
-            T result;
-            if (autoCommit) {
-              result = transaction.run(connection);
-            } else {
-              // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-              connection.setAutoCommit(false);
-              try {
-                result = transaction.run(connection);
-                connection.commit();
-              } catch (Exception e) {
-                connection.rollback();
-                throw e;
-              } finally {
-                connection.setAutoCommit(true);
-              }
-            }
-            callback.onCompletion(result, null);
-          } catch (Exception e) {
+          T result;
+          try {
+            result = runTransaction(autoCommit, transaction);
+          } catch (Exception | Error e) {
             if (isConnectionFailure(e)) {
               connectionFailureCount.inc();
             }
-            callback.onCompletion(null, e);
+            callback.onCompletion(null, e instanceof Exception ? (Exception) e : new IllegalStateException(e));
+            return;
           }
+          callback.onCompletion(result, null);
         });
       } catch (RejectedExecutionException e) {
         rejectTransaction(callback, e);
+      }
+    }
+
+    private <T> T runTransaction(boolean autoCommit, TransactionGeneric<T> transaction) throws Exception {
+      Connection connection = dataSource.getConnection();
+      final T result;
+      try {
+        if (!autoCommit) {
+          connection.setAutoCommit(false);
+        }
+        result = transaction.run(connection);
+        if (!autoCommit) {
+          connection.commit();
+        }
+      } catch (Exception | Error failure) {
+        if (!autoCommit) {
+          try {
+            connection.rollback();
+          } catch (Exception | Error rollbackFailure) {
+            // Returning an unresolved transaction to the pool could commit it when autocommit is restored.
+            discardConnection(connection, rollbackFailure);
+            if (failure != rollbackFailure) {
+              failure.addSuppressed(rollbackFailure);
+            }
+            throw failure;
+          }
+        }
+        returnConnection(connection, autoCommit, failure);
+        throw failure;
+      }
+      returnConnection(connection, autoCommit, null);
+      return result;
+    }
+
+    private void returnConnection(Connection connection, boolean autoCommit, Throwable operationFailure) {
+      try {
+        if (!autoCommit) {
+          try {
+            connection.setAutoCommit(true);
+          } catch (Exception | Error resetFailure) {
+            // Hikari can recycle a connection even when a reset inside close() fails.
+            discardConnection(connection, resetFailure);
+            throw resetFailure;
+          }
+        }
+        connection.close();
+      } catch (Exception | Error cleanupFailure) {
+        metrics.connectionCloseErrorCount.inc();
+        if (operationFailure == null) {
+          if (isConnectionFailure(cleanupFailure)) {
+            connectionFailureCount.inc();
+          }
+        } else if (operationFailure != cleanupFailure) {
+          operationFailure.addSuppressed(cleanupFailure);
+        }
+        logger.error("Failed to return a named blob DB connection in {}", datacenter, cleanupFailure);
+      }
+    }
+
+    private void discardConnection(Connection connection, Throwable failure) {
+      try {
+        if (dataSource instanceof HikariDataSource) {
+          ((HikariDataSource) dataSource).evictConnection(connection);
+        } else {
+          connection.abort(Runnable::run);
+        }
+      } catch (Exception | Error discardFailure) {
+        if (failure != discardFailure) {
+          failure.addSuppressed(discardFailure);
+        }
       }
     }
 
