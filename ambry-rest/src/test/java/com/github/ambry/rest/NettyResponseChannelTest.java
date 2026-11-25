@@ -14,10 +14,15 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.frontend.ContainerMetrics;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
@@ -73,6 +78,7 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -613,6 +619,231 @@ public class NettyResponseChannelTest {
       }
     }
     channel.close();
+  }
+
+  @Test
+  public void testBlobPayloadDownloadWaitsForSuccessfulCompletion() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+      Account account = trackBlobPayload(processor.getRequest(), Direction.DOWNLOAD, listener);
+      NettyResponseChannel response = processor.getRestResponseChannel();
+      byte[] firstChunk = {1, 2, 3};
+      byte[] secondChunk = {4, 5};
+      long returnedBytes = firstChunk.length + secondChunk.length;
+      response.setStatus(ResponseStatus.PartialContent);
+      response.setHeader(RestUtils.Headers.CONTENT_LENGTH, returnedBytes);
+      response.setHeader(RestUtils.Headers.BLOB_SIZE, 100);
+      response.write(ByteBuffer.wrap(firstChunk), null).get(5, TimeUnit.SECONDS);
+      response.write(ByteBuffer.wrap(secondChunk), null).get(5, TimeUnit.SECONDS);
+      verifyNoInteractions(listener);
+
+      response.onResponseComplete(null);
+      response.onResponseComplete(null);
+      channel.runPendingTasks();
+      verify(listener).onTransferComplete(Direction.DOWNLOAD, account, account.getContainerById((short) 2),
+          returnedBytes);
+      verifyNoMoreInteractions(listener);
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testBlobPayloadMultipartUploadExcludesFraming() throws Exception {
+    MetricRegistry registry = new MetricRegistry();
+    NettyMetrics nettyMetrics = new NettyMetrics(registry);
+    VerifiableProperties properties = new VerifiableProperties(new Properties());
+    EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler(), new ChannelInboundHandlerAdapter());
+    try {
+      String payload = "blob-payload";
+      String boundary = "part-boundary";
+      byte[] multipart = ("--" + boundary + "\r\nContent-Disposition: form-data; name=\""
+          + RestUtils.MultipartPost.BLOB_PART + "\"; filename=\"blob\"\r\n"
+          + "Content-Type: application/octet-stream\r\n\r\n" + payload + "\r\n--" + boundary + "--\r\n")
+          .getBytes(StandardCharsets.US_ASCII);
+      HttpHeaders headers = new DefaultHttpHeaders().set(HttpHeaderNames.CONTENT_TYPE,
+          "multipart/form-data; boundary=" + boundary);
+      NettyMultipartRequest request = new NettyMultipartRequest(
+          RestTestUtils.createRequest(HttpMethod.POST, "/", headers), channel, nettyMetrics, Collections.emptySet(),
+          Long.MAX_VALUE);
+      request.getMetricsTracker().injectMetrics(new RestRequestMetrics(getClass(), "MultipartPayload", registry));
+      HttpContent content = new DefaultLastHttpContent(Unpooled.wrappedBuffer(multipart));
+      try {
+        request.addContent(content);
+        request.prepare();
+        assertEquals(multipart.length, request.getBytesReceived());
+        BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+        Account account = trackBlobPayload(request, Direction.UPLOAD, listener);
+        NettyResponseChannel response = new NettyResponseChannel(channel.pipeline().lastContext(), nettyMetrics,
+            new PerformanceConfig(properties), new NettyConfig(properties));
+        response.setRequest(request);
+        response.setStatus(ResponseStatus.Created);
+        response.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        verifyNoInteractions(listener);
+        response.onResponseComplete(null);
+        verify(listener).onTransferComplete(Direction.UPLOAD, account, account.getContainerById((short) 2),
+            payload.length());
+        verifyNoMoreInteractions(listener);
+      } finally {
+        request.close();
+        content.release();
+      }
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testBlobPayloadDownloadIsNotRecordedWhenLastWriteFails() throws Exception {
+    ChannelOutboundHandlerAdapter failLastContent = new ChannelOutboundHandlerAdapter() {
+      @Override
+      public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+        if (msg instanceof LastHttpContent && !(msg instanceof HttpResponse)) {
+          ReferenceCountUtil.release(msg);
+          promise.setFailure(new ClosedChannelException());
+        } else {
+          ctx.write(msg, promise);
+        }
+      }
+    };
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    EmbeddedChannel channel = new EmbeddedChannel(failLastContent, new ChunkedWriteHandler(), processor);
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+      trackBlobPayload(processor.getRequest(), Direction.DOWNLOAD, listener);
+      NettyResponseChannel response = processor.getRestResponseChannel();
+      byte[] payload = {1, 2, 3};
+      assertEquals(payload.length,
+          response.write(ByteBuffer.wrap(payload), null).get(5, TimeUnit.SECONDS).longValue());
+      assertEquals(HttpResponseStatus.OK, ((HttpResponse) channel.readOutbound()).status());
+      response.onResponseComplete(null);
+      channel.runPendingTasks();
+      assertFalse("The final write failed", processor.getRequest().isOpen());
+      verifyNoInteractions(listener);
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testBlobPayloadDownloadIsNotRecordedWhenHandlingFailsAfterFinalWrite() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+      trackBlobPayload(processor.getRequest(), Direction.DOWNLOAD, listener);
+      NettyResponseChannel response = processor.getRestResponseChannel();
+      byte[] payload = {1, 2, 3};
+      response.setHeader(RestUtils.Headers.CONTENT_LENGTH, payload.length);
+      assertEquals(payload.length,
+          response.write(ByteBuffer.wrap(payload), null).get(5, TimeUnit.SECONDS).longValue());
+      response.onResponseComplete(new IOException("response stream failed"));
+      response.onResponseComplete(null);
+      channel.runPendingTasks();
+      verifyNoInteractions(listener);
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testBlobPayloadDownloadIsNotRecordedForShortBody() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+      trackBlobPayload(processor.getRequest(), Direction.DOWNLOAD, listener);
+      NettyResponseChannel response = processor.getRestResponseChannel();
+      byte[] payload = {1, 2, 3};
+      response.setHeader(RestUtils.Headers.CONTENT_LENGTH, payload.length + 1);
+      assertEquals(payload.length,
+          response.write(ByteBuffer.wrap(payload), null).get(5, TimeUnit.SECONDS).longValue());
+      response.onResponseComplete(null);
+      channel.runPendingTasks();
+      assertFalse("Netty finished writing the response", processor.getRequest().isOpen());
+      verifyNoInteractions(listener);
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testBlobPayloadRequiresFinalSuccessAndResolvedTenant() throws Exception {
+    for (ResponseStatus status : Arrays.asList(ResponseStatus.Continue, ResponseStatus.NotModified,
+        ResponseStatus.Accepted)) {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      try {
+        channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+        MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+        BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+        trackBlobPayload(processor.getRequest(), Direction.DOWNLOAD, listener);
+        if (status.isSuccess()) {
+          processor.getRequest().setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, "client-provided-value");
+        }
+        NettyResponseChannel response = processor.getRestResponseChannel();
+        response.setStatus(status);
+        response.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        response.onResponseComplete(null);
+        channel.runPendingTasks();
+        FullHttpResponse outbound = channel.readOutbound();
+        try {
+          assertEquals(status.getStatusCode(), outbound.status().code());
+          verifyNoInteractions(listener);
+        } finally {
+          outbound.release();
+        }
+      } finally {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  @Test
+  public void testBlobPayloadListenerFailureDoesNotChangeResponse() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+      Account account = trackBlobPayload(processor.getRequest(), Direction.DOWNLOAD, listener);
+      Container container = account.getContainerById((short) 2);
+      doThrow(new IllegalStateException("exporter failed"))
+          .when(listener).onTransferComplete(Direction.DOWNLOAD, account, container, 0);
+      NettyResponseChannel response = processor.getRestResponseChannel();
+      response.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+      response.onResponseComplete(null);
+      channel.runPendingTasks();
+      FullHttpResponse outbound = channel.readOutbound();
+      try {
+        assertEquals(HttpResponseStatus.OK, outbound.status());
+        assertEquals(0, outbound.content().readableBytes());
+        verify(listener).onTransferComplete(Direction.DOWNLOAD, account, container, 0);
+        assertFalse("Request should close even if the exporter fails", processor.getRequest().isOpen());
+      } finally {
+        outbound.release();
+      }
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  private static Account trackBlobPayload(RestRequest request, Direction direction,
+      BlobPayloadTransferListener listener) {
+    short accountId = 1;
+    Container container = new ContainerBuilder((short) 2, "payload-container", Container.ContainerStatus.ACTIVE, "",
+        accountId).build();
+    Account account = new AccountBuilder(accountId, "payload-account", Account.AccountStatus.ACTIVE)
+        .containers(Collections.singletonList(container)).build();
+    request.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, account);
+    request.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, container);
+    request.getMetricsTracker().trackBlobPayloadTransfer(direction, listener);
+    return account;
   }
 
   @Test

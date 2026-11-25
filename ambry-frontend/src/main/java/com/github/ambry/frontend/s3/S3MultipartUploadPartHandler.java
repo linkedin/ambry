@@ -27,6 +27,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
@@ -188,6 +189,7 @@ public class S3MultipartUploadPartHandler<R> {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
+        frontendMetrics.trackBlobPayloadTransfer(restRequest, Direction.UPLOAD);
         restRequest.setArg(BLOB_ID_IS_SERVER_GENERATED, true);
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         // TODO [S3] Make changes to sign ETags. Currently they are sent as shown below.

@@ -23,6 +23,8 @@ import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
+import com.github.ambry.rest.BlobPayloadTransferListener;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.AsyncOperationTracker;
 
 
@@ -323,6 +325,18 @@ public class FrontendMetrics {
   public final Histogram blobAgeInMinutes;
 
   private final MetricRegistry metricRegistry;
+  private final BlobPayloadTransferListener blobPayloadTransferListener;
+
+  /**
+   * Marks a payload route for observation at final response completion, if a listener is configured.
+   * @param request the frontend request.
+   * @param direction the direction of the blob payload transfer.
+   */
+  public void trackBlobPayloadTransfer(RestRequest request, BlobPayloadTransferListener.Direction direction) {
+    if (blobPayloadTransferListener != null) {
+      request.getMetricsTracker().trackBlobPayloadTransfer(direction, blobPayloadTransferListener);
+    }
+  }
 
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
@@ -330,6 +344,12 @@ public class FrontendMetrics {
    * @param frontendConfig the {@link FrontendConfig} to use for the metrics.
    */
   public FrontendMetrics(MetricRegistry metricRegistry, FrontendConfig frontendConfig) {
+    this(metricRegistry, frontendConfig, null);
+  }
+
+  FrontendMetrics(MetricRegistry metricRegistry, FrontendConfig frontendConfig,
+      BlobPayloadTransferListener blobPayloadTransferListener) {
+    this.blobPayloadTransferListener = blobPayloadTransferListener;
     // RestRequestMetricsGroup
     // DELETE
     deleteBlobMetricsGroup =

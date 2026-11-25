@@ -107,6 +107,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private final AtomicLong chunksToWriteCount = new AtomicLong(0);
 
   private NettyRequest request = null;
+  private ChunkDispenser chunkDispenser;
   // marked as true if force close is required because close() was called.
   private volatile boolean forceClose = false;
   // the ResponseStatus that will be sent (or has been sent) as a part of the response.
@@ -300,6 +301,14 @@ class NettyResponseChannel implements RestResponseChannel {
         logger.trace("Finished responding to current request on channel {}", ctx.channel());
         nettyMetrics.requestCompletionRate.mark();
         if (exception == null) {
+          if (request != null && request.getMetricsTracker().hasBlobPayloadTransfer()) {
+            // A fixed-length write can finish before the application reports whether the response succeeded.
+            writeFuture.addListener(future -> {
+              if (future.isSuccess()) {
+                recordBlobPayloadTransfer();
+              }
+            });
+          }
           if (!maybeWriteResponseMetadata(responseMetadata, new ResponseMetadataWriteListener())) {
             // There were other writes. Let ChunkedWriteHandler finish if it has been kicked off.
             chunkedWriteHandler.resumeTransfer();
@@ -447,6 +456,15 @@ class NettyResponseChannel implements RestResponseChannel {
     if (request != null && request.isOpen() && shouldCloseRequest) {
       request.close();
       evaluatePerformanceAndUpdateMetrics();
+    }
+  }
+
+  private void recordBlobPayloadTransfer() {
+    if (finalResponseMetadata.status().codeClass() == HttpStatusClass.SUCCESS) {
+      long bodyBytes = chunkDispenser == null ? 0 : chunkDispenser.progress();
+      if (HttpUtil.getContentLength(finalResponseMetadata, bodyBytes) == bodyBytes) {
+        request.getMetricsTracker().recordBlobPayloadTransfer(request, bodyBytes);
+      }
     }
   }
 
@@ -1280,7 +1298,8 @@ class NettyResponseChannel implements RestResponseChannel {
           // otherwise there is some content to write.
           logger.trace("Starting ChunkedWriteHandler on channel {}", ctx.channel());
           writeFuture.addListener(new CallbackInvoker());
-          ctx.writeAndFlush(new ChunkDispenser(), writeFuture);
+          chunkDispenser = new ChunkDispenser();
+          ctx.writeAndFlush(chunkDispenser, writeFuture);
         }
       } else {
         handleChannelWriteFailure(future.cause(), true, true);

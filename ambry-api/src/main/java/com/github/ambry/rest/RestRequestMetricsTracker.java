@@ -14,11 +14,16 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.frontend.ContainerMetrics;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -43,6 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class RestRequestMetricsTracker {
   protected static final String DEFAULT_REQUEST_TYPE = "Unknown";
+  private static final Logger logger = LoggerFactory.getLogger(RestRequestMetricsTracker.class);
 
   private static RestRequestMetrics defaultMetrics;
 
@@ -68,6 +74,9 @@ public class RestRequestMetricsTracker {
   private long bytesTransferred = 0;
   private int finalResponseStatusCode;
   private long responseTimeToFirstByteInMs = -1;
+  private volatile BlobPayloadTransferListener blobPayloadTransferListener;
+  private BlobPayloadTransferListener.Direction blobPayloadTransferDirection;
+  private boolean blobPayloadTransferRecorded;
 
   private enum RequestTerminationReason {
     NONE,
@@ -279,6 +288,52 @@ public class RestRequestMetricsTracker {
 
   public void injectContainerMetrics(ContainerMetrics containerMetrics) {
     this.containerMetrics = containerMetrics;
+  }
+
+  /**
+   * Registers a frontend blob payload transfer for observation at successful response completion.
+   * Only the first registration for a request is used.
+   * @param direction the payload direction selected by the frontend handler.
+   * @param listener the listener to call on successful transfer.
+   */
+  public synchronized void trackBlobPayloadTransfer(BlobPayloadTransferListener.Direction direction,
+      BlobPayloadTransferListener listener) {
+    if (blobPayloadTransferListener == null) {
+      blobPayloadTransferDirection = Objects.requireNonNull(direction);
+      blobPayloadTransferListener = Objects.requireNonNull(listener);
+    }
+  }
+
+  boolean hasBlobPayloadTransfer() {
+    return blobPayloadTransferListener != null;
+  }
+
+  void recordBlobPayloadTransfer(RestRequest request, long responseBodyBytes) {
+    BlobPayloadTransferListener listener;
+    BlobPayloadTransferListener.Direction direction;
+    synchronized (this) {
+      if (blobPayloadTransferListener == null || blobPayloadTransferRecorded
+          || requestTerminationReason.get() != RequestTerminationReason.NONE) {
+        return;
+      }
+      blobPayloadTransferRecorded = true;
+      listener = blobPayloadTransferListener;
+      direction = blobPayloadTransferDirection;
+    }
+    Object account = request.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
+    Object container = request.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
+    if (!(account instanceof Account) || !(container instanceof Container)
+        || ((Container) container).getParentAccountId() != ((Account) account).getId()) {
+      logger.debug("Skipping blob payload transfer without a resolved account and container");
+      return;
+    }
+    long bytes = direction == BlobPayloadTransferListener.Direction.UPLOAD ? request.getBlobBytesReceived()
+        : responseBodyBytes;
+    try {
+      listener.onTransferComplete(direction, (Account) account, (Container) container, bytes);
+    } catch (RuntimeException e) {
+      logger.warn("Blob payload transfer listener failed", e);
+    }
   }
 
   /**
