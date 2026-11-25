@@ -22,6 +22,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetryExecutor;
 import com.github.ambry.commons.RetryPolicies;
@@ -33,6 +34,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -53,6 +55,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -491,6 +494,28 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
           metricsRecoder.namedTtlupdateTimeInMs.update(this.time.milliseconds() - startTime);
           return result;
         }, null, this.metricsRecoder.namedBlobDBUpdateErrorCount);
+  }
+
+  /** Stages descriptors decoded from a single immutable metadata blob without locking or deleting its name. */
+  CompletableFuture<String> stageDeleteManifest(String accountName, String containerName, String blobName, long version,
+      BlobId root, int childCount, Iterator<? extends StoreKey> children) {
+    return executeTransactionAsync(accountName, containerName, false,
+        (account, container, connection) -> NamedBlobManifestStore.capture(connection, account, container, blobName,
+            version, root, childCount, children), null, metricsRecoder.namedBlobDBDeleteErrorCount);
+  }
+
+  /** Publish this exact sealed manifest set atomically with soft retirement. Never returns IDs for a router cascade. */
+  CompletableFuture<Void> retireWithManifests(String accountName, String containerName, String blobName,
+      List<String> manifestIds) {
+    NamedBlobManifestStore.checkManifestCount(manifestIds);
+    List<String> ids = new ArrayList<>(manifestIds);
+    return executeTransactionAsync(accountName, containerName, false, (account, container, connection) -> {
+      if (config.enableHardDelete) {
+        throw new UnsupportedOperationException("Manifest retirement requires named soft delete");
+      }
+      NamedBlobManifestStore.retire(connection, account, container, blobName, ids);
+      return null;
+    }, null, metricsRecoder.namedBlobDBDeleteErrorCount);
   }
 
   @Override
