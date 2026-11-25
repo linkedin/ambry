@@ -18,6 +18,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
@@ -801,6 +802,37 @@ public class NettyResponseChannelTest {
       } finally {
         channel.finishAndReleaseAll();
       }
+    }
+  }
+
+  @Test
+  public void testBlobPayloadIsNotRecordedForUnknownAccount() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      RestRequest request = processor.getRequest();
+      BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+      request.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
+      request.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.DEFAULT_PUBLIC_CONTAINER);
+      request.getMetricsTracker().trackBlobPayloadTransfer(Direction.DOWNLOAD, listener);
+      NettyResponseChannel response = processor.getRestResponseChannel();
+      byte[] payload = {1, 2, 3};
+      response.setHeader(RestUtils.Headers.CONTENT_LENGTH, payload.length);
+      assertEquals(payload.length,
+          response.write(ByteBuffer.wrap(payload), null).get(5, TimeUnit.SECONDS).longValue());
+      response.onResponseComplete(null);
+      channel.runPendingTasks();
+      HttpResponse outbound = channel.readOutbound();
+      try {
+        assertEquals(HttpResponseStatus.OK, outbound.status());
+        assertFalse("Netty finished writing the response", request.isOpen());
+        verifyNoInteractions(listener);
+      } finally {
+        ReferenceCountUtil.release(outbound);
+      }
+    } finally {
+      channel.finishAndReleaseAll();
     }
   }
 
