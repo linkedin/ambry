@@ -39,6 +39,7 @@ import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -162,7 +163,7 @@ public class PostBlobHandlerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP, idConverterFactory);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    metrics = spy(new FrontendMetrics(new MetricRegistry(), frontendConfig));
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     idSigningService = new AmbryIdSigningService();
     if (isReservedMetadataEnabled) {
@@ -240,6 +241,7 @@ public class PostBlobHandlerTest {
     // Post the blob
     postBlobHandler.handle(request, restResponseChannel, future::done);
     future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+    verify(metrics).trackBlobPayloadTransfer(request, Direction.UPLOAD);
     String blobIdFromPut = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
 
     // Retrieve the blob from the router
@@ -536,6 +538,7 @@ public class PostBlobHandlerTest {
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      verify(metrics).trackBlobPayloadTransfer(request, Direction.UPLOAD);
       assertNull(request.getArgs().get(BLOB_ID_IS_SERVER_GENERATED));
       assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       Object metadata = request.getArgs().get(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY);
@@ -695,6 +698,7 @@ public class PostBlobHandlerTest {
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      verify(metrics, never()).trackBlobPayloadTransfer(eq(request), any());
       assertNull(request.getArgs().get(BLOB_ID_IS_SERVER_GENERATED));
       assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);

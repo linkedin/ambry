@@ -31,6 +31,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3Constants;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
+import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3MultipartAbortUploadHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.frontend.s3.S3PostHandler;
@@ -40,6 +41,7 @@ import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -59,12 +61,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
@@ -76,7 +80,9 @@ public class S3MultipartUploadTest {
   private final Account account;
   private final Container container;
   private FrontendConfig frontendConfig;
+  private FrontendMetrics metrics;
   private S3PutHandler s3PutHandler;
+  private S3GetHandler s3GetHandler;
   private NamedBlobDb namedBlobDb;
   private GetBlobHandler getBlobHandler;
   private DeleteBlobHandler deleteBlobHandler;
@@ -142,7 +148,8 @@ public class S3MultipartUploadTest {
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> putResult = new FutureResult<>();
     s3PutHandler.handle(request, restResponseChannel, putResult::done);
-    putResult.get();
+    putResult.get(5, TimeUnit.SECONDS);
+    verify(metrics).trackBlobPayloadTransfer(request, Direction.UPLOAD);
     assertNull(request.getArgs().get(InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
     String etag1 = (String) restResponseChannel.getHeader(Headers.ETAG);
     String location1 = (String) restResponseChannel.getHeader(Headers.LOCATION);
@@ -170,6 +177,21 @@ public class S3MultipartUploadTest {
     assertNotNull("Etag must be present", etag2);
     assertNotNull("Location must be present", location2);
 
+    String listPartsUri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName
+        + "?uploadId=" + uploadId;
+    RestRequest listPartsRequest = FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, listPartsUri,
+        new JSONObject(), null);
+    listPartsRequest.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(listPartsRequest, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    MockRestResponseChannel listPartsResponse = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> listPartsResult = new FutureResult<>();
+    s3GetHandler.handle(listPartsRequest, listPartsResponse, listPartsResult::done);
+    try (ReadableStreamChannel listPartsBody = listPartsResult.get(5, TimeUnit.SECONDS)) {
+      assertEquals(ResponseStatus.Ok, listPartsResponse.getStatus());
+      assertTrue("ListParts returns a control body", listPartsBody.getSize() > 0);
+      verify(metrics, never()).trackBlobPayloadTransfer(eq(listPartsRequest), any());
+    }
+
     // 3. CompleteMultipartUpload
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
     headers = new JSONObject();
@@ -196,7 +218,8 @@ public class S3MultipartUploadTest {
     s3PostHandler.handle(request, restResponseChannel, postResult::done);
     // Verify Upsert header is set by default for S3 multipart uploads.
     assertTrue("Upsert header must be present", request.getArgs().containsKey(NAMED_UPSERT));
-    readableStreamChannel = postResult.get();
+    readableStreamChannel = postResult.get(5, TimeUnit.SECONDS);
+    verify(metrics, never()).trackBlobPayloadTransfer(eq(request), any());
     assertNull(request.getArgs().get(InternalKeys.BLOB_ID_IS_SERVER_GENERATED));
     byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
     byte[] byteArray = byteBuffer.array();
@@ -226,7 +249,8 @@ public class S3MultipartUploadTest {
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> getResult = new FutureResult<>();
     getBlobHandler.handle(requestPath, request, restResponseChannel, getResult::done);
-    readableStreamChannel = getResult.get();
+    readableStreamChannel = getResult.get(5, TimeUnit.SECONDS);
+    verify(metrics).trackBlobPayloadTransfer(request, Direction.DOWNLOAD);
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     byte[] dataContent = new byte[content1.length + content2.length];
     ByteBuffer buffer = ByteBuffer.wrap(dataContent);
@@ -342,7 +366,7 @@ public class S3MultipartUploadTest {
     CommonTestUtils.populateRequiredRouterProps(properties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    metrics = spy(new FrontendMetrics(new MetricRegistry(), frontendConfig));
     ClusterMap clusterMap = new MockClusterMap();
     AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     IdSigningService idSigningService = new AmbryIdSigningService();
@@ -370,6 +394,7 @@ public class S3MultipartUploadTest {
 
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler, null);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
+    s3GetHandler = new S3GetHandler(null, s3MultipartUploadHandler, getBlobHandler, securityService, metrics, injector);
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, s3MultipartUploadHandler, metrics);
   }
 }

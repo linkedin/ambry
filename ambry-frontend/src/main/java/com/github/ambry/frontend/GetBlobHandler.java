@@ -27,6 +27,7 @@ import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
@@ -278,6 +279,9 @@ public class GetBlobHandler {
                 default:
                   LOGGER.error("Unexpected subResource {} when handle response", subResource);
               }
+            }
+            if (response != null && (subResource == null || subResource == SubResource.Segment)) {
+              metrics.trackBlobPayloadTransfer(restRequest, Direction.DOWNLOAD);
             }
             finalCallback.onCompletion(response, null);
           }, restRequest.getUri(), LOGGER,

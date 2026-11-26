@@ -33,6 +33,7 @@ import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NoOpResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -241,6 +242,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
+        frontendMetrics.trackBlobPayloadTransfer(restRequest, Direction.UPLOAD);
         restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);

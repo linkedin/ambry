@@ -58,6 +58,7 @@ import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -123,6 +124,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -169,6 +171,7 @@ public class FrontendRestRequestServiceTest {
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
+  private final Map<RestRequest, Direction> blobPayloadDirections = new ConcurrentHashMap<>();
   private final FrontendMetrics frontendMetrics;
   private IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
@@ -219,7 +222,12 @@ public class FrontendRestRequestServiceTest {
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    frontendMetrics = new FrontendMetrics(metricRegistry, frontendConfig);
+    frontendMetrics = new FrontendMetrics(metricRegistry, frontendConfig) {
+      @Override
+      public void trackBlobPayloadTransfer(RestRequest request, Direction direction) {
+        blobPayloadDirections.put(request, direction);
+      }
+    };
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     String endpoint = "http://localhost:1174";
     urlSigningService = new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
@@ -544,6 +552,13 @@ public class FrontendRestRequestServiceTest {
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getStatus());
     assertEquals("Unexpected blob Id", blobIdWithClusterName, restResponseChannel.getHeader(LOCATION));
+    assertEquals(Direction.UPLOAD, blobPayloadDirections.get(restRequest));
+
+    RestRequest getRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, null, null);
+    MockRestResponseChannel getResponse = new MockRestResponseChannel();
+    doOperation(getRequest, getResponse);
+    assertEquals(ResponseStatus.Ok, getResponse.getStatus());
+    assertEquals(Direction.DOWNLOAD, blobPayloadDirections.get(getRequest));
   }
 
   @Test
@@ -2548,6 +2563,25 @@ public class FrontendRestRequestServiceTest {
     JSONObject response = new JSONObject(new String(restResponseChannel.getResponseBody()));
     String chunkId = response.get(GetBlobHandler.BLOB_CHUNK_IDS_KEY).toString();
     assertEquals("Blob chunk Id count mismatch", mockChunkIds.size(), chunkId.split(",").length);
+    assertNull("Chunk ID lists are not downloads", blobPayloadDirections.get(restRequest));
+  }
+
+  @Test
+  public void testBlobPayloadSegmentDownload() throws Exception {
+    byte[] payload = {1, 2, 3};
+    BlobProperties properties =
+        new BlobProperties(payload.length, refAccount.getName(), "owner", "application/octet-stream", false,
+            Utils.Infinite_Time, refAccount.getId(), refContainer.getId(), false, null, null, null);
+    ReadableStreamChannel content = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(payload));
+    String blobId =
+        router.putBlobWithIdVersion(properties, new byte[0], content, BlobId.BLOB_ID_V6).get(5, TimeUnit.SECONDS);
+    RestRequest request = createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.Segment + "/0",
+        null, null);
+    MockRestResponseChannel response = new MockRestResponseChannel();
+    doOperation(request, response);
+    assertEquals(ResponseStatus.Ok, response.getStatus());
+    assertArrayEquals(payload, response.getResponseBody());
+    assertEquals(Direction.DOWNLOAD, blobPayloadDirections.get(request));
   }
 
   /**
@@ -3599,6 +3633,7 @@ public class FrontendRestRequestServiceTest {
       Container expectedContainer) throws JSONException, RestServiceException {
     assertEquals("Unexpected response status", range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent,
         restResponseChannel.getStatus());
+    assertEquals(Direction.DOWNLOAD, blobPayloadDirections.get(restRequest));
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
         expectedHeaders.get(RestUtils.Headers.BLOB_SIZE).toString(),
@@ -3651,6 +3686,7 @@ public class FrontendRestRequestServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.NotModified, restResponseChannel.getStatus());
+    assertNull("Not Modified responses are not downloads", blobPayloadDirections.get(restRequest));
     assertNotNull("Date header expected", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     assertNotNull("Last-Modified header expected", restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED));
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
@@ -3734,6 +3770,7 @@ public class FrontendRestRequestServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, createRequestHeaders(range, getOption), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
+    assertNull("HEAD requests are not downloads", blobPayloadDirections.get(restRequest));
     assertEquals("Unexpected response status", range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent,
         restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);

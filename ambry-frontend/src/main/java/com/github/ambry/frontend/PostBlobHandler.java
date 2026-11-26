@@ -24,6 +24,7 @@ import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -237,6 +238,7 @@ class PostBlobHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
+        frontendMetrics.trackBlobPayloadTransfer(restRequest, Direction.UPLOAD);
         setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
         restRequest.getMetricsTracker().setBytesTransferred(restRequest.getBytesReceived());
         restRequest.setArg(RestUtils.InternalKeys.BLOB_ID_IS_SERVER_GENERATED, true);

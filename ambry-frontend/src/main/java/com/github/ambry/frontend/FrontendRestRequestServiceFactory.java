@@ -27,6 +27,7 @@ import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaManagerFactory;
+import com.github.ambry.rest.BlobPayloadTransferListener;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestRequestServiceFactory;
 import com.github.ambry.router.Router;
@@ -62,13 +63,26 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
    */
   public FrontendRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       Router router, AccountService accountService) {
+    this(verifiableProperties, clusterMap, router, accountService, null);
+  }
+
+  /**
+   * Lets a custom frontend factory supply an exporter-neutral blob payload transfer listener.
+   * @param verifiableProperties the properties to use to create configs.
+   * @param clusterMap the cluster map to use.
+   * @param router the router to use.
+   * @param accountService the account service to use.
+   * @param blobPayloadTransferListener the listener, or {@code null} to disable observations.
+   */
+  protected FrontendRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      Router router, AccountService accountService, BlobPayloadTransferListener blobPayloadTransferListener) {
     this.verifiableProperties = Objects.requireNonNull(verifiableProperties, "Provided VerifiableProperties is null");
     this.clusterMap = Objects.requireNonNull(clusterMap, "Provided ClusterMap is null");
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry(), frontendConfig);
+    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry(), frontendConfig, blobPayloadTransferListener);
     logger.trace("Instantiated FrontendRestRequestServiceFactory");
   }
 
