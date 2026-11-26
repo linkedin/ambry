@@ -1706,25 +1706,34 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
     String badDiskMountPath = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
-    int downReplicaCount = 0;
-    for (ReplicaId replica : replicas) {
-      if (replica.getMountPath().equals(badDiskMountPath)) {
-        new File(replica.getReplicaPath()).setReadable(false);
-        downReplicaCount++;
+    List<File> unreadableReplicaDirs = new ArrayList<>();
+    try {
+      for (ReplicaId replica : replicas) {
+        if (replica.getMountPath().equals(badDiskMountPath)) {
+          File replicaDir = new File(replica.getReplicaPath());
+          assertTrue("Could not make replica unreadable: " + replicaDir, replicaDir.setReadable(false));
+          unreadableReplicaDirs.add(replicaDir);
+        }
+      }
+      StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+      storageManager.start();
+      assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
+      Map<String, Counter> counters = metricRegistry.getCounters();
+      assertEquals(0,
+          getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
+      assertEquals(unreadableReplicaDirs.size(),
+          getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+      assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
+      checkStoreAccessibility(replicas, badDiskMountPath, storageManager);
+      verifyCompactionThreadCount(storageManager, mountPaths.size());
+      shutdownAndAssertStoresInaccessible(storageManager, replicas);
+      assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
+    } finally {
+      // Restore permissions so MockClusterMap#cleanup() can delete these directories during teardown.
+      for (File replicaDir : unreadableReplicaDirs) {
+        replicaDir.setReadable(true);
       }
     }
-    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
-    storageManager.start();
-    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
-    Map<String, Counter> counters = metricRegistry.getCounters();
-    assertEquals(0,
-        getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
-    assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
-    assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
-    checkStoreAccessibility(replicas, badDiskMountPath, storageManager);
-    verifyCompactionThreadCount(storageManager, mountPaths.size());
-    shutdownAndAssertStoresInaccessible(storageManager, replicas);
-    assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
 
   /**
