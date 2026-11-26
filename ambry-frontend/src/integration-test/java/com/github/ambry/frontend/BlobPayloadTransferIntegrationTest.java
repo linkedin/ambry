@@ -13,12 +13,15 @@
  */
 package com.github.ambry.frontend;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -28,12 +31,16 @@ import java.net.ServerSocket;
 import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.codahale.metrics.MetricRegistry;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
@@ -42,6 +49,8 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.ReferenceCountUtil;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.github.ambry.account.Account;
@@ -59,6 +68,7 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobPayloadTransferListener;
+import com.github.ambry.rest.BlobPayloadTransferListener.Direction;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestUtils;
@@ -76,61 +86,186 @@ public class BlobPayloadTransferIntegrationTest {
       .addOrUpdateContainer(CONTAINER)
       .build();
   private static volatile BlobPayloadTransferListener factoryListener;
+  private final BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+  private final InetAddress loopback = InetAddress.getLoopbackAddress();
+  private MockClusterMap clusterMap;
+  private RestServer server;
+  private NettyClient client;
+
+  @Before
+  public void setUp() throws Exception {
+    clusterMap = new MockClusterMap();
+    int port;
+    try (ServerSocket socket = new ServerSocket(0, 1, loopback)) {
+      port = socket.getLocalPort();
+    }
+    factoryListener = listener;
+    try {
+      server = new RestServer(serverProperties(port), clusterMap, new LoggingNotificationSystem(), null);
+    } finally {
+      factoryListener = null;
+    }
+    server.start();
+    client = new NettyClient(loopback.getHostAddress(), port, null);
+  }
+
+  @After
+  public void tearDown() {
+    try {
+      shutdownServer();
+    } finally {
+      if (clusterMap != null) {
+        clusterMap.close();
+      }
+    }
+  }
 
   @Test
   public void testPostNotifiesConfiguredListener() throws Exception {
-    BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+    CountDownLatch uploadCompleted = watchTransfer(Direction.UPLOAD);
+    byte[] payload = {1, 2, 3, 4};
+    postBlob(payload);
+    assertTrue("POST returned 201, but the transfer listener was not notified",
+        uploadCompleted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+    shutdownServer();
+    verify(listener).onTransferComplete(Direction.UPLOAD, ACCOUNT, CONTAINER, payload.length);
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
+  public void testRangeGetNotifiesConfiguredListenerForReturnedBytes() throws Exception {
+    CountDownLatch uploadCompleted = watchTransfer(Direction.UPLOAD);
+    CountDownLatch downloadCompleted = watchTransfer(Direction.DOWNLOAD);
+    byte[] payload = {1, 2, 3, 4};
+    byte[] expected = {2, 3};
+    String blobId = postBlob(payload);
+    assertTrue("POST returned 201, but the transfer listener was not notified",
+        uploadCompleted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+
+    FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, blobId);
+    request.headers().set(HttpHeaderNames.RANGE, "bytes=1-2");
+    NettyClient.ResponseParts response = sendRequest(request);
+    try {
+      HttpResponse headers = responseHeaders(response);
+      assertEquals(HttpResponseStatus.PARTIAL_CONTENT, headers.status());
+      assertEquals("bytes 1-2/4", headers.headers().get(HttpHeaderNames.CONTENT_RANGE));
+      assertEquals(expected.length, HttpUtil.getContentLength(headers));
+      assertResponseBody(response, expected);
+    } finally {
+      response.queue.forEach(ReferenceCountUtil::release);
+    }
+    assertTrue("Range GET returned 206, but the transfer listener was not notified",
+        downloadCompleted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+    shutdownServer();
+    verify(listener).onTransferComplete(Direction.UPLOAD, ACCOUNT, CONTAINER, payload.length);
+    verify(listener).onTransferComplete(Direction.DOWNLOAD, ACCOUNT, CONTAINER, expected.length);
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
+  public void testFullChunkedGetNotifiesConfiguredListener() throws Exception {
+    CountDownLatch uploadCompleted = watchTransfer(Direction.UPLOAD);
+    CountDownLatch downloadCompleted = watchTransfer(Direction.DOWNLOAD);
+    int chunkedPayloadSize = 20_000;
+    byte[] payload = TestUtils.getRandomBytes(chunkedPayloadSize);
+    String blobId = postBlob(payload);
+    assertTrue("POST returned 201, but the transfer listener was not notified",
+        uploadCompleted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+
+    FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, blobId);
+    NettyClient.ResponseParts response = sendRequest(request);
+    try {
+      HttpResponse headers = responseHeaders(response);
+      assertEquals(HttpResponseStatus.OK, headers.status());
+      assertTrue("Expected chunked transfer encoding", HttpUtil.isTransferEncodingChunked(headers));
+      assertFalse("Chunked response must not have Content-Length", HttpUtil.isContentLengthSet(headers));
+      assertResponseBody(response, payload);
+    } finally {
+      response.queue.forEach(ReferenceCountUtil::release);
+    }
+    assertTrue("Full GET returned 200, but the transfer listener was not notified",
+        downloadCompleted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+    shutdownServer();
+    verify(listener).onTransferComplete(Direction.UPLOAD, ACCOUNT, CONTAINER, payload.length);
+    verify(listener).onTransferComplete(Direction.DOWNLOAD, ACCOUNT, CONTAINER, payload.length);
+    verifyNoMoreInteractions(listener);
+  }
+
+  private static void assertResponseBody(NettyClient.ResponseParts response, byte[] expected) {
+    byte[] actual = new byte[expected.length];
+    int offset = 0;
+    for (HttpObject part : response.queue) {
+      if (part instanceof HttpContent) {
+        ByteBuf content = ((HttpContent) part).content();
+        int length = content.readableBytes();
+        assertTrue("Response body exceeds the expected length", length <= actual.length - offset);
+        content.getBytes(content.readerIndex(), actual, offset, length);
+        offset += length;
+      }
+    }
+    assertEquals("Unexpected response body length", expected.length, offset);
+    assertArrayEquals(expected, actual);
+  }
+
+  private CountDownLatch watchTransfer(Direction direction) {
     CountDownLatch transferCompleted = new CountDownLatch(1);
     doAnswer(invocation -> {
       transferCompleted.countDown();
       return null;
-    }).when(listener).onTransferComplete(any(), any(), any(), anyLong());
-    factoryListener = listener;
+    }).when(listener).onTransferComplete(eq(direction), any(), any(), anyLong());
+    return transferCompleted;
+  }
 
-    InetAddress loopback = InetAddress.getLoopbackAddress();
-    int port;
-    byte[] payload = {1, 2, 3, 4};
-    try (MockClusterMap clusterMap = new MockClusterMap()) {
-      try (ServerSocket socket = new ServerSocket(0, 1, loopback)) {
-        port = socket.getLocalPort();
-      }
-      RestServer server = new RestServer(serverProperties(port), clusterMap, new LoggingNotificationSystem(), null);
-      try {
-        server.start();
-        FullHttpRequest request =
-            new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/", Unpooled.wrappedBuffer(payload));
-        try (NettyClient client = new NettyClient(loopback.getHostAddress(), port, null)) {
-          request.headers().set(RestUtils.Headers.SERVICE_ID, "blob-transfer-test");
-          request.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
-          request.headers().set(RestUtils.Headers.TARGET_ACCOUNT_NAME, ACCOUNT.getName());
-          request.headers().set(RestUtils.Headers.TARGET_CONTAINER_NAME, CONTAINER.getName());
-          HttpUtil.setContentLength(request, payload.length);
-          NettyClient.ResponseParts response =
-              client.sendRequest(request, null, null).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-          try {
-            HttpObject firstPart = response.queue.peek();
-            assertTrue("Expected an HTTP response", firstPart instanceof HttpResponse);
-            HttpResponse headers = (HttpResponse) firstPart;
-            assertEquals(HttpResponseStatus.CREATED, headers.status());
-            assertNotNull("Expected a generated blob ID", headers.headers().get(HttpHeaderNames.LOCATION));
-          } finally {
-            response.queue.forEach(ReferenceCountUtil::release);
-          }
-          assertTrue("POST returned 201, but the transfer listener was not notified",
-              transferCompleted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
-        } finally {
-          if (request.refCnt() > 0) {
-            request.release();
-          }
-        }
-      } finally {
-        server.shutdown();
-      }
-      verify(listener).onTransferComplete(BlobPayloadTransferListener.Direction.UPLOAD, ACCOUNT, CONTAINER,
-          payload.length);
-      verifyNoMoreInteractions(listener);
+  private String postBlob(byte[] payload) throws Exception {
+    FullHttpRequest request =
+        new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/", Unpooled.wrappedBuffer(payload));
+    request.headers().set(RestUtils.Headers.SERVICE_ID, "blob-transfer-test");
+    request.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+    request.headers().set(RestUtils.Headers.TARGET_ACCOUNT_NAME, ACCOUNT.getName());
+    request.headers().set(RestUtils.Headers.TARGET_CONTAINER_NAME, CONTAINER.getName());
+    HttpUtil.setContentLength(request, payload.length);
+    NettyClient.ResponseParts response = sendRequest(request);
+    try {
+      HttpResponse headers = responseHeaders(response);
+      assertEquals(HttpResponseStatus.CREATED, headers.status());
+      String blobId = headers.headers().get(HttpHeaderNames.LOCATION);
+      assertNotNull("Expected a generated blob ID", blobId);
+      return blobId;
     } finally {
-      factoryListener = null;
+      response.queue.forEach(ReferenceCountUtil::release);
+    }
+  }
+
+  private NettyClient.ResponseParts sendRequest(FullHttpRequest request) throws Exception {
+    try {
+      return client.sendRequest(request, null, null).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      client.close();
+      throw e;
+    } finally {
+      if (request.refCnt() > 0) {
+        request.release();
+      }
+    }
+  }
+
+  private static HttpResponse responseHeaders(NettyClient.ResponseParts response) {
+    HttpObject firstPart = response.queue.peek();
+    assertTrue("Expected an HTTP response", firstPart instanceof HttpResponse);
+    return (HttpResponse) firstPart;
+  }
+
+  private void shutdownServer() {
+    try {
+      if (client != null) {
+        client.close();
+      }
+    } finally {
+      if (server != null) {
+        RestServer startedServer = server;
+        server = null;
+        startedServer.shutdown();
+      }
     }
   }
 

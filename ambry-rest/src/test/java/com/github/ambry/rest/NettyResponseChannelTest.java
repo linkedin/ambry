@@ -653,6 +653,93 @@ public class NettyResponseChannelTest {
   }
 
   @Test
+  public void testBlobPayloadChunkedDownload() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    try {
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+      RestRequest request = processor.getRequest();
+      BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+      Account account = trackBlobPayload(request, Direction.DOWNLOAD, listener);
+      NettyResponseChannel response = processor.getRestResponseChannel();
+      byte[] firstChunk = {1, 2, 3};
+      byte[] secondChunk = {4, 5};
+      assertEquals(firstChunk.length, response.write(ByteBuffer.wrap(firstChunk), null).get(5, TimeUnit.SECONDS)
+          .longValue());
+      assertEquals(secondChunk.length, response.write(ByteBuffer.wrap(secondChunk), null).get(5, TimeUnit.SECONDS)
+          .longValue());
+      verifyNoInteractions(listener);
+
+      response.onResponseComplete(null);
+      channel.runPendingTasks();
+      assertChunkedBlobResponse(channel, firstChunk.length, secondChunk.length);
+      assertFalse("Netty finished writing the response", request.isOpen());
+      verify(listener).onTransferComplete(Direction.DOWNLOAD, account, account.getContainerById((short) 2),
+          firstChunk.length + secondChunk.length);
+      verifyNoMoreInteractions(listener);
+    } finally {
+      channel.finishAndReleaseAll();
+    }
+  }
+
+  @Test
+  public void testBlobPayloadDownloadIsNotRecordedAfterTermination() throws Exception {
+    for (boolean clientAbort : new boolean[]{true, false}) {
+      EmbeddedChannel channel = createEmbeddedChannel();
+      try {
+        channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+        MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+        RestRequest request = processor.getRequest();
+        BlobPayloadTransferListener listener = mock(BlobPayloadTransferListener.class);
+        trackBlobPayload(request, Direction.DOWNLOAD, listener);
+        NettyResponseChannel response = processor.getRestResponseChannel();
+        byte[] payload = {1, 2, 3};
+        assertEquals(payload.length, response.write(ByteBuffer.wrap(payload), null).get(5, TimeUnit.SECONDS)
+            .longValue());
+        // Mark termination without closing the channel so the final write can still succeed.
+        RestRequestMetricsTracker tracker = request.getMetricsTracker();
+        assertTrue(clientAbort ? tracker.markClientAborted(false) : tracker.markIdleTimeoutTermination());
+
+        response.onResponseComplete(null);
+        channel.runPendingTasks();
+        assertChunkedBlobResponse(channel, payload.length);
+        assertFalse("Netty finished writing the response", request.isOpen());
+        verifyNoInteractions(listener);
+      } finally {
+        channel.finishAndReleaseAll();
+      }
+    }
+  }
+
+  private static void assertChunkedBlobResponse(EmbeddedChannel channel, int... chunkLengths) {
+    HttpResponse headers = channel.readOutbound();
+    try {
+      assertEquals(HttpResponseStatus.OK, headers.status());
+      assertTrue(HttpUtil.isTransferEncodingChunked(headers));
+      assertFalse(HttpUtil.isContentLengthSet(headers));
+    } finally {
+      ReferenceCountUtil.release(headers);
+    }
+    for (int length : chunkLengths) {
+      HttpContent content = channel.readOutbound();
+      try {
+        assertFalse("Expected a body chunk", content instanceof LastHttpContent);
+        assertEquals(length, content.content().readableBytes());
+      } finally {
+        ReferenceCountUtil.release(content);
+      }
+    }
+    HttpContent end = channel.readOutbound();
+    try {
+      assertTrue("Expected the final chunk", end instanceof LastHttpContent);
+      assertEquals(0, end.content().readableBytes());
+    } finally {
+      ReferenceCountUtil.release(end);
+    }
+    assertNull(channel.readOutbound());
+  }
+
+  @Test
   public void testBlobPayloadMultipartUploadExcludesFraming() throws Exception {
     MetricRegistry registry = new MetricRegistry();
     NettyMetrics nettyMetrics = new NettyMetrics(registry);
@@ -806,7 +893,7 @@ public class NettyResponseChannelTest {
   }
 
   @Test
-  public void testBlobPayloadIsNotRecordedForUnknownAccount() throws Exception {
+  public void testBlobPayloadDownloadIsRecordedForUnknownAccount() throws Exception {
     EmbeddedChannel channel = createEmbeddedChannel();
     try {
       channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
@@ -827,7 +914,9 @@ public class NettyResponseChannelTest {
       try {
         assertEquals(HttpResponseStatus.OK, outbound.status());
         assertFalse("Netty finished writing the response", request.isOpen());
-        verifyNoInteractions(listener);
+        verify(listener).onTransferComplete(Direction.DOWNLOAD, InMemAccountService.UNKNOWN_ACCOUNT,
+            Container.DEFAULT_PUBLIC_CONTAINER, payload.length);
+        verifyNoMoreInteractions(listener);
       } finally {
         ReferenceCountUtil.release(outbound);
       }

@@ -323,7 +323,6 @@ public class RestRequestMetricsTracker {
     Object account = request.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
     Object container = request.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
     if (!(account instanceof Account) || !(container instanceof Container)
-        || ((Account) account).getId() == Account.UNKNOWN_ACCOUNT_ID
         || ((Container) container).getParentAccountId() != ((Account) account).getId()) {
       logger.debug("Skipping blob payload transfer without a resolved account and container");
       return;

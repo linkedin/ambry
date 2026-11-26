@@ -20,8 +20,9 @@ import com.github.ambry.account.Container;
 /**
  * Observes frontend blob payload transfers. Netty calls the listener at most once per request, after successful
  * request handling and a successful final response write. This confirms a server-side write, not receipt by the client.
- * An event requires a server-resolved account and container. Transfers assigned to the unknown account do not emit
- * events. Control and metadata requests do not emit events.
+ * An event requires a server-resolved account and matching container. The unknown account
+ * ({@link Account#UNKNOWN_ACCOUNT_ID}) and its default fallback container can be reported. Consumers can record those
+ * bytes as unattributed. Control and metadata requests do not emit events.
  * Implementations must be thread-safe and must not block the I/O thread.
  */
 @FunctionalInterface
