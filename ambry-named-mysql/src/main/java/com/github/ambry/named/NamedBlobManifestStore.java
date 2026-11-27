@@ -31,9 +31,12 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.store.StoreKey;
 
 /**
- * Detached evidence for one immutable root at one named version. Seal means that all declared
- * descriptors were captured. Neither seal nor inspection grants permission to delete anything.
- * The reader data source must consistently supply connections to the same database at READ COMMITTED or stronger.
+ * Detached evidence for one immutable root at one named version. A row in {@code named_blob_manifests_v1} exists
+ * only once it is fully formed: there is no durable pre-publication staging state, no nullable seal column, and no
+ * separate capture transaction whose result another transaction later publishes. The single entry point below
+ * validates the entire requested set, locks the named range, locks the manifest tuples, and -- only once every
+ * check has passed -- inserts the rows and fences their history in one transaction. Neither a row's existence nor
+ * its publication grants permission to delete anything.
  *
  * <p>Each named version has exactly one row, keyed by the same {@code (account_id, container_id, blob_name,
  * version)} tuple that identifies it in {@code named_blobs_v2}. The ordered child list is stored as that row's own
@@ -65,81 +68,16 @@ final class NamedBlobManifestStore {
     }
   }
 
-  /**
-   * The caller must supply the ordered descriptors decoded from this exact root, not from a name
-   * lookup. The live-row check is a nonlocking eligibility check, not a publication or TTL fence.
-   * A concurrent replacement can leave an unpublished manifest row; it cannot redirect it to a different root.
-   */
-  static void capture(Connection c, short account, short container, String name, long version, BlobId root, int expected,
-      Iterator<? extends StoreKey> descriptors) throws SQLException {
-    Objects.requireNonNull(root, "root");
-    Objects.requireNonNull(descriptors, "descriptors");
-    if (name == null || name.isEmpty() || expected < 1 || expected > MAX_CHILDREN
-        || root.sizeInBytes() < 1 || root.sizeInBytes() > 50
-        || root.getAccountId() != account || root.getContainerId() != container
-        || root.getBlobDataType() != BlobId.BlobDataType.METADATA) {
-      throw new SQLDataException("Unsupported named composite capture");
-    }
-    if (c.getAutoCommit()) {
-      throw new IllegalStateException("Capture requires a caller-owned transaction");
-    }
-    byte[] rootBytes = root.toBytes();
-    try (PreparedStatement s = c.prepareStatement("SELECT blob_name FROM named_blobs_v2 WHERE " + KEY
-        + " AND blob_id=? AND blob_state=? AND (deleted_ts IS NULL OR deleted_ts > UTC_TIMESTAMP(6)) FOR UPDATE")) {
-      bindKey(s, account, container, name, version);
-      s.setBytes(5, rootBytes);
-      s.setInt(6, NamedBlobState.READY.ordinal());
-      try (ResultSet r = s.executeQuery()) {
-        // utf8mb4_bin on VARCHAR can compare names equal despite trailing spaces.
-        if (!r.next() || !name.equals(r.getString(1))) {
-          throw new SQLDataException("No matching live READY named version");
-        }
-      }
-    }
+  /** One requested version's immutable inputs: the caller must supply descriptors decoded from this exact root. */
+  static final class PendingVersion {
+    final BlobId root;
+    final int expected;
+    final Iterator<? extends StoreKey> descriptors;
 
-    // Reserve the row without touching an existing payload: a concurrent racer for the same tuple must observe
-    // whatever this statement establishes, not silently reset a sealed manifest.
-    try (PreparedStatement s = c.prepareStatement("INSERT INTO " + TABLE
-        + " (account_id,container_id,blob_name,version,root_id,child_count)"
-        + " VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE account_id=account_id")) {
-      bindKey(s, account, container, name, version);
-      s.setBytes(5, rootBytes);
-      s.setInt(6, expected);
-      s.executeUpdate();
-    }
-    Manifest m;
-    byte[] existingPayload;
-    // The eligibility read may have established a snapshot before a competing capture committed.
-    try (PreparedStatement s = c.prepareStatement(
-        "SELECT " + HEADER_COLUMNS + ",payload FROM " + TABLE + " WHERE " + KEY + " FOR UPDATE")) {
-      bindKey(s, account, container, name, version);
-      try (ResultSet r = s.executeQuery()) {
-        if (!r.next()) {
-          throw new SQLDataException("No manifest for the requested named version");
-        }
-        m = new Manifest(r);
-        existingPayload = r.getBytes(8);
-      }
-    }
-    if (!m.name.equals(name) || !m.root.equals(root.getID()) || m.count != expected) {
-      // A residual row for a different root must never be mistaken for this capture: the tuple cannot be reused
-      // for a different root while any manifest or cleanup job may still depend on the original.
-      throw new SQLDataException("Conflicting manifest for named version");
-    }
-
-    byte[] body = encode(descriptors, expected, rootBytes);
-    if (existingPayload == null) {
-      try (PreparedStatement update = c.prepareStatement(
-          "UPDATE " + TABLE + " SET payload=?,payload_hash=? WHERE " + KEY + " AND payload IS NULL")) {
-        update.setBytes(1, body);
-        update.setBytes(2, hash(account, container, name, version, m.count, m.root, body));
-        bindKey(update, account, container, name, version, 3);
-        if (update.executeUpdate() != 1) {
-          throw new SQLDataException("Concurrent capture already sealed this manifest");
-        }
-      }
-    } else if (!Arrays.equals(body, existingPayload)) {
-      throw new SQLDataException("Capture retry disagrees with sealed manifest");
+    PendingVersion(BlobId root, int expected, Iterator<? extends StoreKey> descriptors) {
+      this.root = Objects.requireNonNull(root, "root");
+      this.expected = expected;
+      this.descriptors = Objects.requireNonNull(descriptors, "descriptors");
     }
   }
 
@@ -194,56 +132,68 @@ final class NamedBlobManifestStore {
     return new ArrayList<>(sorted);
   }
 
-  static void retire(Connection c, short account, short container, String name, List<Long> manifestVersions)
+  /**
+   * Validate, publish and fence an entire set of named versions in one transaction. Every declared bound -- per
+   * version child count, aggregate child count across the whole request, root shape -- is checked purely against
+   * caller-supplied values before a single iterator is touched, a payload is encoded, or a statement is issued: a
+   * doomed oversized request never reads or hashes a byte under lock. The named row range is then locked ahead of
+   * the manifest table, the same order an ordinary named PUT's own AFTER INSERT/UPDATE guard uses, so the two can
+   * never deadlock against each other. A replay that already carries this exact receipt, root and content for every
+   * requested version returns successfully without resolving the name; anything less than all of them matching is
+   * rejected rather than partially honored.
+   */
+  static void retire(Connection c, short account, short container, String name, Map<Long, PendingVersion> pending)
       throws SQLException {
     if (c.getAutoCommit() || c.getTransactionIsolation() != Connection.TRANSACTION_REPEATABLE_READ) {
       throw new IllegalStateException("Publication requires an InnoDB REPEATABLE READ transaction");
     }
-    List<Long> requested = canonicalVersions(manifestVersions);
-    byte[] receipt =
-        sha256().digest(requested.stream().map(String::valueOf).collect(Collectors.joining(",")).getBytes(
-            StandardCharsets.US_ASCII));
-    Map<Long, Manifest> manifests = new LinkedHashMap<>();
-    int published = 0;
-    int totalChildren = 0;
-    try (PreparedStatement s = c.prepareStatement(
-        "SELECT " + HEADER_COLUMNS + ",payload,payload_hash FROM " + TABLE + " WHERE " + KEY + " FOR UPDATE")) {
-      for (long version : requested) {
-        bindKey(s, account, container, name, version);
-        try (ResultSet r = s.executeQuery()) {
-          if (!r.next()) {
-            throw new SQLDataException("Unknown manifest");
-          }
-          Manifest m = new Manifest(r);
-          byte[] payload = r.getBytes(8);
-          byte[] payloadHash = r.getBytes(9);
-          if (payload == null || payloadHash == null) {
-            throw new SQLDataException("Manifest is not sealed");
-          }
-          if (!MessageDigest.isEqual(payloadHash, hash(account, container, name, version, m.count, m.root, payload))) {
-            throw new SQLDataException("Invalid sealed manifest");
-          }
-          manifests.put(version, m);
-          if (m.publicationKey != null) {
-            if (!Arrays.equals(receipt, m.publicationKey)) {
-              throw new SQLDataException("Manifest belongs to a different publication");
-            }
-            published++;
-          }
-          totalChildren += m.count;
-        }
+    if (name == null || name.isEmpty()) {
+      throw new SQLDataException("Unsupported named composite capture");
+    }
+    Objects.requireNonNull(pending, "pending");
+    List<Long> requested = canonicalVersions(new ArrayList<>(pending.keySet()));
+
+    long totalDeclared = 0;
+    for (long version : requested) {
+      PendingVersion p = pending.get(version);
+      if (p == null) {
+        throw new IllegalArgumentException("Missing pending descriptors for version " + version);
       }
+      BlobId root = p.root;
+      if (p.expected < 1 || p.expected > MAX_CHILDREN || root.sizeInBytes() < 1 || root.sizeInBytes() > 50
+          || root.getAccountId() != account || root.getContainerId() != container
+          || root.getBlobDataType() != BlobId.BlobDataType.METADATA) {
+        throw new SQLDataException("Unsupported named composite capture");
+      }
+      totalDeclared += p.expected;
     }
-    // On replay do not even resolve the name: it may already refer to a different root.
-    if (published == manifests.size()) {
-      return;
-    }
-    if (published != 0 || totalChildren > MAX_CHILDREN) {
+    if (totalDeclared > MAX_CHILDREN) {
       throw new SQLDataException("Mixed or oversized publication");
     }
+
+    byte[] receipt = receipt(requested);
+
+    // Only now, with the whole request's declared size already bounded, consume each iterator and encode its body.
+    Map<Long, byte[]> rootBytes = new LinkedHashMap<>();
+    Map<Long, byte[]> bodies = new LinkedHashMap<>();
+    Map<Long, String> rootIds = new LinkedHashMap<>();
+    for (long version : requested) {
+      PendingVersion p = pending.get(version);
+      byte[] rb = p.root.toBytes();
+      rootBytes.put(version, rb);
+      rootIds.put(version, Base64.getUrlEncoder().withoutPadding().encodeToString(rb));
+      bodies.put(version, encode(p.descriptors, p.expected, rb));
+    }
+
+    // Lock the named row range first: this is the same order (named_blobs_v2, then named_blob_manifests_v1) an
+    // ordinary PUT's own trigger uses. At REPEATABLE READ this range also locks the gap where a new, initially
+    // unfenced version must be inserted.
+    Map<Long, Boolean> liveMatch = new LinkedHashMap<>();
     List<Long> history = new ArrayList<>();
-    int matches = 0;
-    // At REPEATABLE READ this range also locks the gap where a new, initially unfenced version must be inserted.
+    // An unrequested, still-live row blocks a fresh publish -- retirement only ever covers a contiguous prefix of
+    // the unfenced range -- but a pure replay never needs to resolve the name at all, so this is recorded rather
+    // than thrown here and is only enforced once the manifest lookup below has ruled out a full replay.
+    boolean unrequestedLiveVersion = false;
     try (PreparedStatement s = c.prepareStatement("SELECT blob_name,version,blob_id,blob_state,"
         + "(deleted_ts IS NOT NULL AND deleted_ts<=UTC_TIMESTAMP(6)) FROM named_blobs_v2"
         + " FORCE INDEX (named_blob_unfenced_versions) WHERE account_id=? AND container_id=? AND blob_name=?"
@@ -258,37 +208,95 @@ final class NamedBlobManifestStore {
           if (++rows > MAX_VERSIONS || !name.equals(r.getString(1))) {
             throw new SQLDataException("Unsupported named version range");
           }
-          Manifest m = manifests.get(r.getLong(2));
-          if (m == null && r.getBoolean(5)) {
-            history.add(r.getLong(2));
+          long version = r.getLong(2);
+          if (!pending.containsKey(version)) {
+            if (r.getBoolean(5)) {
+              history.add(version);
+            } else {
+              unrequestedLiveVersion = true;
+            }
             continue;
           }
-          if (m == null || r.getInt(4) != NamedBlobState.READY.ordinal() || r.getBoolean(5)
-              || !m.root.equals(Base64.getUrlEncoder().withoutPadding().encodeToString(r.getBytes(3)))) {
-            throw new SQLDataException("Unrepresented or ineligible named version");
-          }
-          matches++;
+          boolean eligible = r.getInt(4) == NamedBlobState.READY.ordinal() && !r.getBoolean(5)
+              && Arrays.equals(r.getBytes(3), rootBytes.get(version));
+          liveMatch.put(version, eligible);
         }
       }
     }
-    if (matches != manifests.size()) {
-      throw new SQLDataException("Expected named version is absent");
+
+    // Pure exact-receipt lookup by tuple, independent of whatever the range above found: a prior commit's manifest
+    // row is proof enough on its own, even if the named row it refers to was since purged entirely.
+    int published = 0;
+    try (PreparedStatement s = c.prepareStatement(
+        "SELECT root_id,child_count,payload,payload_hash,publication_key FROM " + TABLE + " WHERE " + KEY
+            + " FOR UPDATE")) {
+      for (long version : requested) {
+        bindKey(s, account, container, name, version);
+        try (ResultSet r = s.executeQuery()) {
+          if (!r.next()) {
+            continue;
+          }
+          byte[] storedRoot = r.getBytes(1);
+          int storedCount = r.getInt(2);
+          byte[] storedPayload = r.getBytes(3);
+          byte[] storedHash = r.getBytes(4);
+          byte[] storedKey = r.getBytes(5);
+          boolean sameInputs = Arrays.equals(storedRoot, rootBytes.get(version)) && storedCount == pending.get(
+              version).expected && Arrays.equals(storedPayload, bodies.get(version)) && MessageDigest.isEqual(
+              storedHash, hash(account, container, name, version, storedCount, rootIds.get(version), storedPayload));
+          if (!sameInputs) {
+            throw new SQLDataException("Conflicting manifest for named version");
+          }
+          if (!MessageDigest.isEqual(storedKey, receipt)) {
+            throw new SQLDataException("Manifest belongs to a different publication");
+          }
+          published++;
+        }
+      }
     }
-    try (PreparedStatement publish = c.prepareStatement("UPDATE " + TABLE
-        + " SET publication_key=? WHERE " + KEY + " AND publication_key IS NULL");
-        PreparedStatement retire = c.prepareStatement("UPDATE named_blobs_v2 SET retirement_fenced=TRUE,deleted_ts=NULL"
-            + " WHERE retirement_fenced=FALSE AND " + KEY);
-        PreparedStatement fence = c.prepareStatement("SELECT 1 FROM named_blobs_v2 WHERE retirement_fenced=TRUE"
-            + " AND deleted_ts<=UTC_TIMESTAMP(6) AND " + KEY + " FOR UPDATE")) {
-      for (Manifest m : manifests.values()) {
-        publish.setBytes(1, receipt);
-        bindKey(publish, account, container, name, m.version, 2);
-        if (publish.executeUpdate() != 1) {
+    // Never report success for only part of the requested set: either every version already carries this exact
+    // receipt, root and content, or none of them may.
+    if (published == requested.size()) {
+      return;
+    }
+    if (published != 0) {
+      throw new SQLDataException("Mixed or oversized publication");
+    }
+    if (unrequestedLiveVersion) {
+      throw new SQLDataException("Unrepresented or ineligible named version");
+    }
+    for (long version : requested) {
+      if (!Boolean.TRUE.equals(liveMatch.get(version))) {
+        throw new SQLDataException("Unrepresented or ineligible named version");
+      }
+    }
+
+    try (PreparedStatement insert = c.prepareStatement(
+        "INSERT INTO " + TABLE + " (" + HEADER_COLUMNS + ",payload,payload_hash) VALUES (?,?,?,?,?,?,?,?,?)")) {
+      for (long version : requested) {
+        PendingVersion p = pending.get(version);
+        byte[] body = bodies.get(version);
+        insert.setInt(1, account);
+        insert.setInt(2, container);
+        insert.setString(3, name);
+        insert.setLong(4, version);
+        insert.setBytes(5, rootBytes.get(version));
+        insert.setInt(6, p.expected);
+        insert.setBytes(7, receipt);
+        insert.setBytes(8, body);
+        insert.setBytes(9, hash(account, container, name, version, p.expected, rootIds.get(version), body));
+        if (insert.executeUpdate() != 1) {
           throw new SQLDataException("Cannot publish sealed manifest");
         }
       }
+    }
+
+    try (PreparedStatement retire = c.prepareStatement(
+        "UPDATE named_blobs_v2 SET retirement_fenced=TRUE,deleted_ts=NULL WHERE retirement_fenced=FALSE AND " + KEY);
+        PreparedStatement fence = c.prepareStatement("SELECT 1 FROM named_blobs_v2 WHERE retirement_fenced=TRUE"
+            + " AND deleted_ts<=UTC_TIMESTAMP(6) AND " + KEY + " FOR UPDATE")) {
       // History needs the TTL fence, not a fabricated cleanup manifest. All versions are still locked.
-      history.addAll(manifests.keySet());
+      history.addAll(requested);
       for (long version : history) {
         bindKey(retire, account, container, name, version);
         bindKey(fence, account, container, name, version);
@@ -325,12 +333,51 @@ final class NamedBlobManifestStore {
       if (count < 1 || count > MAX_CHILDREN) {
         throw new SQLDataException("Invalid manifest bounds: " + name + "/" + version);
       }
+
     }
   }
 
-  /** Recover a known publication by its exact tuple, without resolving the name or reading the original root. */
+  private static byte[] receipt(List<Long> orderedVersions) {
+    return sha256().digest(orderedVersions.stream().map(String::valueOf).collect(Collectors.joining(","))
+        .getBytes(StandardCharsets.US_ASCII));
+  }
+
+  /** Resolve a lost commit reply from immutable receipts on the authoritative writer, without reading the name. */
+  boolean isPublished(short account, short container, String name, List<Long> versions) throws SQLException {
+    List<Long> requested = canonicalVersions(versions);
+    byte[] key = receipt(requested);
+    String placeholders = String.join(",", Collections.nCopies(requested.size(), "?"));
+    String sql = "SELECT blob_name,publication_key FROM " + TABLE
+        + " WHERE account_id=? AND container_id=? AND blob_name=? AND version IN (" + placeholders + ")";
+    try (Connection c = db.getConnection()) {
+      requireCommittedReads(c);
+      try (PreparedStatement s = c.prepareStatement(sql)) {
+        s.setInt(1, account);
+        s.setInt(2, container);
+        s.setString(3, name);
+        for (int i = 0; i < requested.size(); i++) {
+          s.setLong(i + 4, requested.get(i));
+        }
+        try (ResultSet r = s.executeQuery()) {
+          int count = 0;
+          while (r.next()) {
+            if (!name.equals(r.getString(1)) || !MessageDigest.isEqual(key, r.getBytes(2))) {
+              return false;
+            }
+            count++;
+          }
+          return count == requested.size();
+        }
+      }
+    }
+  }
+
+  /**
+   * Recover a known publication by its exact tuple, without resolving the name or reading the original root. Every
+   * row in this table is published by construction, so existence alone is sufficient.
+   */
   Manifest getPublished(short account, short container, String name, long version) throws SQLException {
-    String sql = "SELECT " + HEADER_COLUMNS + " FROM " + TABLE + " WHERE " + KEY + " AND publication_key IS NOT NULL";
+    String sql = "SELECT " + HEADER_COLUMNS + " FROM " + TABLE + " WHERE " + KEY;
     try (Connection c = db.getConnection()) {
       requireCommittedReads(c);
       try (PreparedStatement s = c.prepareStatement(sql)) {
@@ -347,7 +394,7 @@ final class NamedBlobManifestStore {
     }
   }
 
-  /** Read the full ordered child list for one sealed manifest row; the caller owns any inspection progress. */
+  /** Read the full ordered child list for one published manifest row; the caller owns any inspection progress. */
   List<String> read(Manifest m) throws SQLException {
     byte[] body;
     try (Connection c = db.getConnection()) {
@@ -356,13 +403,10 @@ final class NamedBlobManifestStore {
         bindKey(s, m.account, m.container, m.name, m.version);
         try (ResultSet r = s.executeQuery()) {
           if (!r.next()) {
-            throw new SQLDataException("Missing sealed manifest: " + m.name + "/" + m.version);
+            throw new SQLDataException("Missing published manifest: " + m.name + "/" + m.version);
           }
           byte[] payload = r.getBytes(1);
           byte[] payloadHash = r.getBytes(2);
-          if (payload == null || payloadHash == null) {
-            throw new SQLDataException("Manifest is not sealed: " + m.name + "/" + m.version);
-          }
           if (!MessageDigest.isEqual(payloadHash, hash(m.account, m.container, m.name, m.version, m.count, m.root,
               payload))) {
             throw new SQLDataException("Manifest checksum mismatch: " + m.name + "/" + m.version);
@@ -376,14 +420,14 @@ final class NamedBlobManifestStore {
     for (int i = 0; i < m.count; i++) {
       int length = in.hasRemaining() ? Byte.toUnsignedInt(in.get()) : 0;
       if (length == 0 || length > MAX_ID_BYTES || length > in.remaining()) {
-        throw new SQLDataException("Invalid sealed child descriptor");
+        throw new SQLDataException("Invalid published child descriptor");
       }
       byte[] bytes = new byte[length];
       in.get(bytes);
       ids.add(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes));
     }
     if (in.hasRemaining()) {
-      throw new SQLDataException("Trailing bytes on sealed manifest");
+      throw new SQLDataException("Trailing bytes on published manifest");
     }
     return Collections.unmodifiableList(ids);
   }

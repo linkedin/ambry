@@ -22,7 +22,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetryExecutor;
 import com.github.ambry.commons.RetryPolicies;
@@ -34,7 +33,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -55,7 +53,6 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -496,25 +493,19 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         }, null, this.metricsRecoder.namedBlobDBUpdateErrorCount);
   }
 
-  /** Stage descriptors for the exact live root without retiring its named version. */
-  CompletableFuture<Void> stageDeleteManifest(String accountName, String containerName, String blobName, long version,
-      BlobId root, int childCount, Iterator<? extends StoreKey> children) {
-    return executeTransactionAsync(accountName, containerName, false, (account, container, connection) -> {
-      NamedBlobManifestStore.capture(connection, account, container, blobName, version, root, childCount, children);
-      return null;
-    }, null, metricsRecoder.namedBlobDBDeleteErrorCount);
-  }
-
-  /** Publish this exact sealed manifest set atomically with soft retirement. Never returns IDs for a router cascade. */
+  /**
+   * Validate, publish and fence this exact set of named versions in one transaction. Never returns IDs for a
+   * router cascade. There is no separate staging step: a version's descriptors are supplied and consumed in the
+   * same call that retires it.
+   */
   CompletableFuture<Void> retireWithManifests(String accountName, String containerName, String blobName,
-      List<Long> manifestVersions) {
-    NamedBlobManifestStore.checkManifestCount(manifestVersions);
-    List<Long> versions = new ArrayList<>(manifestVersions);
+      Map<Long, NamedBlobManifestStore.PendingVersion> pendingVersions) {
+    NamedBlobManifestStore.checkManifestCount(new ArrayList<>(pendingVersions.keySet()));
     return executeTransactionAsync(accountName, containerName, false, (account, container, connection) -> {
       if (config.enableHardDelete) {
         throw new UnsupportedOperationException("Manifest retirement requires named soft delete");
       }
-      NamedBlobManifestStore.retire(connection, account, container, blobName, versions);
+      NamedBlobManifestStore.retire(connection, account, container, blobName, pendingVersions);
       return null;
     }, null, metricsRecoder.namedBlobDBDeleteErrorCount);
   }

@@ -2,9 +2,10 @@
 
 Each manifest stores the ordered child IDs of one immutable metadata blob in a single MySQL row. Its primary key is
 `(account_id, container_id, blob_name, version)`, the same key that identifies the named version. The root ID identifies
-the source of the list; repeated child IDs retain their positions. Publication and retirement commit together. If the
-commit outcome is unknown, retry the same exact versions, roots and lists. Do not resolve the latest version of the
-name or fall back to the router's ordinary delete.
+the source of the list; repeated child IDs retain their positions. Prepare the lists in memory. Persist every complete
+manifest and retire the named versions in one transaction. A crash before commit leaves neither a manifest nor a
+retirement. If the commit reply is lost, check the exact version set on the authoritative writer. If not committed,
+retry from the original exact inputs. Never resolve a replacement name or fall back to the router's ordinary delete.
 
 A reader with a saved tuple can recover the published list after a restart without fetching the original root.
 Configure the reader data source for `READ COMMITTED` or stronger on every checkout.
@@ -22,7 +23,9 @@ longer count toward the limit of 32 unfenced versions per name. A name above tha
 version, fails without changing any row. Exclude such names from rollout until their history has been safely reconciled;
 retrying unchanged input will not help. A publication supports at most 262,144 children across its versions (1 TiB at
 4 MiB per child). Each descriptor has a one-byte length and at most 127 ID bytes: the largest encoded list is 32 MiB,
-which requires `LONGBLOB` rather than `MEDIUMBLOB`. Before enabling publication, round-trip a maximum-size binary
+which requires `LONGBLOB` rather than `MEDIUMBLOB`. At the child-count limit, 34-byte V6 IDs yield 8.75 MiB and
+58-byte V5 IDs with canonical UUIDs yield 14.75 MiB. The accepted V5 string form can reach 127 bytes per ID; 32 MiB
+is the format limit, not a typical Liquid payload. Before enabling publication, round-trip a maximum-size binary
 payload through the deployed JDBC connection and check `@@session.max_allowed_packet` on writers and failover targets.
 Connector/J 8.0.21 with client-side prepared statements rejected a synthetic 32 MiB body at a 64 MiB packet limit:
 the measured query exceeded 64 MiB before transmission. The same bytes round-tripped with server-side prepared
@@ -32,15 +35,16 @@ production settings. Check the client limit as well as MySQL and replication lim
 ## Installing or resuming the migration
 
 **Defer production DDL until the activation prerequisites below are ready.** Nothing installs automatically, but once
-installed the trigger fires on every update, even on unfenced rows with manifests disabled. If its definer disappears
-or loses privileges, ordinary TTL finalization and soft deletes can fail.
+installed the triggers run on ordinary writes even with manifests disabled. A missing definer or missing privileges
+can break named PUT, TTL finalization and soft DELETE.
 
 From `ambry-named-mysql/src/main/resources`, set `DB` to the approved writer's named-blob schema. Use separate mysql
 options files: `MYSQL_CNF` for schema DDL and `DEFINER_CNF` for the durable service account that will own the trigger.
 The trigger file uses MySQL's implicit `DEFINER=CURRENT_USER`. Before installation, confirm the matched `user@host`
 is the intended permanent account, **not** a personal or temporary migration identity. Have the DBA verify on every
 writer and promotion candidate that this account exists and retains `TRIGGER`, `SELECT` and `UPDATE` on `named_blobs_v2`
-for the trigger's lifetime. Use the approved trigger-install process for the server's binary logging configuration.
+and the privileges required for locking reads on `named_blob_manifests_v1` for the triggers' lifetime.
+Use the approved trigger-install process for the server's binary logging configuration.
 
 ```sh
 mysql --defaults-file="$DEFINER_CNF" --database="$DB" -e 'SELECT CURRENT_USER(), DATABASE(); SHOW GRANTS'
@@ -98,13 +102,13 @@ The database operations alone are not safe to activate. In addition to the DELET
 - Give the worker indexed discovery of committed publications or durably record the exact tuples before retirement.
   A process-local list is lost on restart; a saved tuple is actionable only after publication.
 
-Before staging the first manifest, route all frontend and direct named DELETE callers away from legacy DELETE for the
+Before publishing the first manifest, route all frontend and direct named DELETE callers away from legacy DELETE for the
 enabled namespace, or reject those requests. Also exclude its account or container from `NamedBlobsCleanupRunner` on
 every runner, for both stale cleanup and purge. Drain in-flight requests, cleaner batches already selected, and their
 router deletes. Either path can send a root to the router, which can eagerly delete shared children. If the exclusion
 cannot be guaranteed (for example, the runner cannot resolve the account), keep the cleaner stopped.
 
-On rollback, disable staging and publication but retain the DELETE gate, cleaner exclusion, database fence, index, and
+On rollback, disable publication but retain the DELETE gate, cleaner exclusion, database fence, index, and
 published evidence. Do not send affected traffic or cleaner work to an old binary that cannot honor those gates.
 
 This store does not retire raw parent IDs, establish exclusive ownership of chunks, schedule cleanup, or reclaim space.

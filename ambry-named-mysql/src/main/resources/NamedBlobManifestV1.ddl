@@ -5,9 +5,9 @@ CREATE TABLE named_blob_manifests_v1 (
     version BIGINT NOT NULL,
     root_id VARBINARY(50) NOT NULL,
     child_count INT NOT NULL,
-    payload LONGBLOB DEFAULT NULL,
-    payload_hash BINARY(32) DEFAULT NULL,
-    publication_key BINARY(32) DEFAULT NULL,
+    payload LONGBLOB NOT NULL,
+    payload_hash BINARY(32) NOT NULL,
+    publication_key BINARY(32) NOT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
