@@ -379,34 +379,26 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
     String blobName = "testDeleteWithMultipleVersions-" + TestUtils.getRandomKey(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
+    long expirationTimeMs = time.milliseconds() + TimeUnit.HOURS.toMillis(1);
 
     String blobId1 = getBlobId(account, container);
     String blobId2 = getBlobId(account, container);
     String blobId3 = getBlobId(account, container);
     String blobId4 = getBlobId(account, container);
 
-    // insert version 1 with state = ready, deletedts = -1
     NamedBlobRecord record1 =
-        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId1, Utils.Infinite_Time);
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId1, Utils.Infinite_Time, 1);
     namedBlobDb.put(record1, NamedBlobState.READY, true).get();
-    // insert version 2 with state = in_progress, deletedts = -1
-    time.sleep(100);
     NamedBlobRecord record2 =
-        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId2, Utils.Infinite_Time);
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId2, Utils.Infinite_Time, 2);
     namedBlobDb.put(record2, NamedBlobState.IN_PROGRESS, true).get();
-    time.sleep(100);
-    // insert version 3 with state = ready, deletedts = now() + 1 hour
-    time.setCurrentMilliseconds(System.currentTimeMillis());
-    NamedBlobRecord record3 = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId3,
-        time.milliseconds() + TimeUnit.HOURS.toMillis(1));
+    NamedBlobRecord record3 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId3, expirationTimeMs, 3);
     namedBlobDb.put(record3, NamedBlobState.READY, true).get();
-    time.sleep(100);
-    // insert version 4 with state = in_progress, deletedts = now() + 1 hour
-    time.setCurrentMilliseconds(System.currentTimeMillis());
-    NamedBlobRecord record4 = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId4,
-        time.milliseconds() + TimeUnit.HOURS.toMillis(1));
+    NamedBlobRecord record4 =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId4, expirationTimeMs, 4);
     namedBlobDb.put(record4, NamedBlobState.IN_PROGRESS, true).get();
-    time.sleep(100);
     // call get, it should return blob3
     NamedBlobRecord getRecord = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
     assertEquals(record3, getRecord);
@@ -432,16 +424,12 @@ public class MySqlNamedBlobDbIntegrationTest extends MySqlNamedBlobDbIntergratio
     // Adding new versions
     String blobId5 = getBlobId(account, container);
     String blobId6 = getBlobId(account, container);
-    // insert version 5 with state = ready, deletedts = -1
     NamedBlobRecord record5 =
-        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId5, Utils.Infinite_Time);
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId5, Utils.Infinite_Time, 5);
     namedBlobDb.put(record5, NamedBlobState.READY, true).get();
-    // insert version 6 with state = in_progress, deletedts = -1
-    time.sleep(100);
     NamedBlobRecord record6 =
-        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId6, Utils.Infinite_Time);
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId6, Utils.Infinite_Time, 6);
     namedBlobDb.put(record6, NamedBlobState.IN_PROGRESS, true).get();
-    time.sleep(100);
 
     deleteResult = namedBlobDb.delete(account.getName(), container.getName(), blobName).get();
     if (enableHardDelete) {
