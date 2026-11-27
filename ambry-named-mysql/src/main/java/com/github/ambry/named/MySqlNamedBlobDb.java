@@ -496,24 +496,25 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         }, null, this.metricsRecoder.namedBlobDBUpdateErrorCount);
   }
 
-  /** Stages descriptors decoded from a single immutable metadata blob without locking or deleting its name. */
-  CompletableFuture<String> stageDeleteManifest(String accountName, String containerName, String blobName, long version,
+  /** Stage descriptors for the exact live root without retiring its named version. */
+  CompletableFuture<Void> stageDeleteManifest(String accountName, String containerName, String blobName, long version,
       BlobId root, int childCount, Iterator<? extends StoreKey> children) {
-    return executeTransactionAsync(accountName, containerName, false,
-        (account, container, connection) -> NamedBlobManifestStore.capture(connection, account, container, blobName,
-            version, root, childCount, children), null, metricsRecoder.namedBlobDBDeleteErrorCount);
+    return executeTransactionAsync(accountName, containerName, false, (account, container, connection) -> {
+      NamedBlobManifestStore.capture(connection, account, container, blobName, version, root, childCount, children);
+      return null;
+    }, null, metricsRecoder.namedBlobDBDeleteErrorCount);
   }
 
   /** Publish this exact sealed manifest set atomically with soft retirement. Never returns IDs for a router cascade. */
   CompletableFuture<Void> retireWithManifests(String accountName, String containerName, String blobName,
-      List<String> manifestIds) {
-    NamedBlobManifestStore.checkManifestCount(manifestIds);
-    List<String> ids = new ArrayList<>(manifestIds);
+      List<Long> manifestVersions) {
+    NamedBlobManifestStore.checkManifestCount(manifestVersions);
+    List<Long> versions = new ArrayList<>(manifestVersions);
     return executeTransactionAsync(accountName, containerName, false, (account, container, connection) -> {
       if (config.enableHardDelete) {
         throw new UnsupportedOperationException("Manifest retirement requires named soft delete");
       }
-      NamedBlobManifestStore.retire(connection, account, container, blobName, ids);
+      NamedBlobManifestStore.retire(connection, account, container, blobName, versions);
       return null;
     }, null, metricsRecoder.namedBlobDBDeleteErrorCount);
   }

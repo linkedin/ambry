@@ -6,6 +6,7 @@ package com.github.ambry.named;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -26,7 +27,7 @@ public class NamedBlobManifestStoreTest {
     NamedBlobManifestStore store = new NamedBlobManifestStore(db);
     verify(db, never()).getConnection();
     try {
-      store.getPublished("00000000-0000-0000-0000-000000000001");
+      store.getPublished((short) 17, (short) 4, "folder/MixedCase", 1);
       fail("A reader could observe a publication that rolls back");
     } catch (IllegalStateException e) {
       assertTrue(e.getMessage(), e.getMessage().contains("READ COMMITTED"));
@@ -38,17 +39,29 @@ public class NamedBlobManifestStoreTest {
 
   @Test
   public void testPublicationUsesADistinctOrderIndependentSet() {
-    String first = "00000000-0000-0000-0000-000000000001";
-    String second = "00000000-0000-0000-0000-000000000002";
-    assertEquals(Arrays.asList(first, second), NamedBlobManifestStore.canonicalIds(Arrays.asList(second, first)));
-    for (List<String> invalid : Arrays.asList(Arrays.asList(first, first), Collections.singletonList("0-0-0-0-1"),
-        Collections.<String>emptyList())) {
+    assertEquals(Arrays.asList(1L, 2L), NamedBlobManifestStore.canonicalVersions(Arrays.asList(2L, 1L)));
+    for (List<Long> invalid : Arrays.asList(Arrays.asList(1L, 1L), Collections.<Long>singletonList(null),
+        Collections.<Long>emptyList())) {
       try {
-        NamedBlobManifestStore.canonicalIds(invalid);
+        NamedBlobManifestStore.canonicalVersions(invalid);
         fail("Invalid publication set accepted: " + invalid);
       } catch (IllegalArgumentException expected) {
         // Reject before acquiring database locks.
       }
+    }
+  }
+
+  @Test
+  public void testPublicationRejectsMoreThanTheDeclaredVersionCap() {
+    List<Long> tooMany = new ArrayList<>();
+    for (long version = 1; version <= 33; version++) {
+      tooMany.add(version);
+    }
+    try {
+      NamedBlobManifestStore.checkManifestCount(tooMany);
+      fail("More than the declared cap of distinct named versions was accepted in one publication");
+    } catch (IllegalArgumentException expected) {
+      assertEquals("Invalid number of manifests", expected.getMessage());
     }
   }
 }

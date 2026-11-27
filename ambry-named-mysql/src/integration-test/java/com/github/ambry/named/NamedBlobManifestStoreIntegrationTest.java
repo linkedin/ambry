@@ -50,6 +50,8 @@ public class NamedBlobManifestStoreIntegrationTest {
   private static final short ACCOUNT = 17;
   private static final short CONTAINER = 4;
   private static final String NAME = "folder/MixedCase";
+  // The declared per-manifest and aggregate-publish child cap; exercised at full scale below.
+  private static final int MAX_CHILDREN = 262_144;
 
   @Test
   public void testDetachedRecoveryAcrossReplacement() throws Exception {
@@ -83,6 +85,8 @@ public class NamedBlobManifestStoreIntegrationTest {
           }
           install(ddl, "/NamedBlobManifestV1.ddl");
           install(ddl, "/NamedBlobRetirementFenceV1.sql");
+          install(ddl, "/NamedBlobManifestTupleGuardInsertV1.sql");
+          install(ddl, "/NamedBlobManifestTupleGuardUpdateV1.sql");
         }
         try (MySqlNamedBlobDb named = namedDb(db)) {
           scenario.run(db, named);
@@ -106,11 +110,12 @@ public class NamedBlobManifestStoreIntegrationTest {
         endpoint -> db, "local", new Metrics(new MetricRegistry(), ""));
   }
 
-  private static String stage(MySqlNamedBlobDb db, String name, long version, BlobId root, int count,
+  /** Stage descriptors for one named version; the sealed row is keyed only by the (account, container, name,
+   *  version) tuple, so nothing is returned to identify it afterward. */
+  private static void stage(MySqlNamedBlobDb db, String name, long version, BlobId root, int count,
       Iterator<BlobId> children) throws Exception {
     try {
-      return db.stageDeleteManifest("account", "container", name, version, root, count, children)
-          .get(10, TimeUnit.SECONDS);
+      db.stageDeleteManifest("account", "container", name, version, root, count, children).get(10, TimeUnit.SECONDS);
     } catch (ExecutionException e) {
       if (e.getCause() instanceof SQLDataException) {
         throw (SQLDataException) e.getCause();
@@ -123,11 +128,10 @@ public class NamedBlobManifestStoreIntegrationTest {
     BlobId old = blob(BlobId.BlobDataType.METADATA);
     BlobId replacement = blob(BlobId.BlobDataType.METADATA);
     List<BlobId> children = new ArrayList<>();
-    for (int i = 0; i <= NamedBlobManifestStore.PAGE_SIZE; i++) {
+    for (int i = 0; i < 65; i++) {
       children.add(blob(BlobId.BlobDataType.DATACHUNK));
     }
     List<String> ids = children.stream().map(BlobId::getID).collect(Collectors.toList());
-    int boundary = NamedBlobManifestStore.PAGE_SIZE;
     insertNamed(db, 7, old, NamedBlobState.READY);
     insertNamed(db, 8, replacement, NamedBlobState.IN_PROGRESS);
     NamedBlobManifestStore writer = new NamedBlobManifestStore(db);
@@ -139,22 +143,23 @@ public class NamedBlobManifestStoreIntegrationTest {
     expectDataError("No matching live READY", () ->
         stage(named, NAME, 7, replacement, children.size(), children.iterator()));
     expectDataError("Missing or unsupported child", () ->
-        stage(named, NAME, 7, old, children.size(), children.subList(0, boundary).iterator()));
+        stage(named, NAME, 7, old, children.size(), children.subList(0, children.size() - 1).iterator()));
     assertEquals(0, scalar(db, "SELECT COUNT(*) FROM named_blob_manifests_v1"));
 
-    String job = stage(named, NAME, 7, old, children.size(), children.iterator());
-    assertEquals(job, stage(named, NAME, 7, old, children.size(), children.iterator()));
+    stage(named, NAME, 7, old, children.size(), children.iterator());
+    // A retry against the already-sealed row is idempotent: it must not re-seal or fail.
+    stage(named, NAME, 7, old, children.size(), children.iterator());
     List<BlobId> reordered = new ArrayList<>(children);
     Collections.swap(reordered, 0, 1);
     expectDataError("Capture retry disagrees", () ->
         stage(named, NAME, 7, old, reordered.size(), reordered.iterator()));
 
-    assertNull("Staging alone does not publish work", writer.getPublished(job));
-    expectDataError("Unrepresented or ineligible", () -> retire(named, Collections.singletonList(job)));
+    assertNull("Staging alone does not publish work", writer.getPublished(ACCOUNT, CONTAINER, NAME, 7));
+    expectDataError("Unrepresented or ineligible", () -> retire(named, Collections.singletonList(7L)));
     sql(db, "DELETE FROM named_blobs_v2 WHERE version=8");
-    retire(named, Collections.singletonList(job));
+    retire(named, Collections.singletonList(7L));
     insertNamed(db, 8, replacement, NamedBlobState.READY);
-    retire(named, Collections.singletonList(job));
+    retire(named, Collections.singletonList(7L));
     assertEquals(replacement.getID(), named.get("account", "container", NAME).get(10, TimeUnit.SECONDS).getBlobId());
     // Remove the retired fixture row entirely: a worker that resolves the source name cannot pass.
     try (Connection c = db.getConnection(); PreparedStatement remove = c.prepareStatement(
@@ -173,18 +178,18 @@ public class NamedBlobManifestStoreIntegrationTest {
       return c;
     });
     NamedBlobManifestStore worker = new NamedBlobManifestStore(readers);
-    NamedBlobManifestStore.Manifest recovered = worker.getPublished(job);
-    assertEquals(job, recovered.id);
+    NamedBlobManifestStore.Manifest recovered = worker.getPublished(ACCOUNT, CONTAINER, NAME, 7);
     assertEquals(old.getID(), recovered.root);
     assertEquals(7L, recovered.version);
-    assertEquals(ids.subList(0, boundary), worker.read(recovered, 0));
+    // The worker recovered the exact tuple without resolving the name or reading the original root.
+    assertEquals(ids, worker.read(recovered));
 
     try (Connection dirty = db.getConnection()) {
       dirty.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
       doReturn(dirty).when(readers).getConnection();
       try {
-        worker.read(recovered, 0);
-        fail("A valid header checkout must not authorize a dirty page checkout");
+        worker.read(recovered);
+        fail("A valid header checkout must not authorize a dirty payload checkout");
       } catch (IllegalStateException expected) {
         assertTrue(expected.getMessage(), expected.getMessage().contains("READ COMMITTED"));
       }
@@ -192,29 +197,31 @@ public class NamedBlobManifestStoreIntegrationTest {
     }
 
     NamedBlobManifestStore restarted = new NamedBlobManifestStore(db);
-    NamedBlobManifestStore.Manifest again = restarted.getPublished(job);
-    assertEquals(job, again.id);
-    assertEquals(ids.subList(0, boundary), restarted.read(again, 0));
-    assertEquals(ids.subList(boundary, ids.size()), restarted.read(again, boundary));
-    assertNull(restarted.getPublished(UUID.randomUUID().toString()));
+    NamedBlobManifestStore.Manifest again = restarted.getPublished(ACCOUNT, CONTAINER, NAME, 7);
+    assertEquals(ids, restarted.read(again));
+    assertNull(restarted.getPublished(ACCOUNT, CONTAINER, NAME, 999));
+    assertNull(restarted.getPublished(ACCOUNT, CONTAINER, NAME + " ", 7));
 
-    // A second root can legitimately reference the same child. Both records remain evidence.
-    String other = stage(named, NAME, 8, replacement, 1,
-        Collections.singletonList(children.get(0)).iterator());
-    assertNotEquals(job, other);
-    retire(named, Collections.singletonList(other));
-    NamedBlobManifestStore.Manifest second = restarted.getPublished(other);
-    assertEquals(other, second.id);
+    // A second root can legitimately reference the same child. Both rows remain evidence, each keyed by its
+    // own tuple: a worker that saved (name, version=8) trusts that row directly, independent of the root at
+    // version 7 or any other version.
+    stage(named, NAME, 8, replacement, 1, Collections.singletonList(children.get(0)).iterator());
+    retire(named, Collections.singletonList(8L));
+    NamedBlobManifestStore.Manifest second = restarted.getPublished(ACCOUNT, CONTAINER, NAME, 8);
     assertEquals(replacement.getID(), second.root);
-    assertEquals(Collections.singletonList(ids.get(0)), restarted.read(second, 0));
+    assertEquals(Collections.singletonList(ids.get(0)), restarted.read(second));
     assertEquals(2, scalar(db, "SELECT COUNT(*) FROM named_blob_manifests_v1 WHERE publication_key IS NOT NULL"));
 
     try (Connection c = db.getConnection(); PreparedStatement s = c.prepareStatement(
-        "UPDATE named_blob_manifest_pages_v1 SET payload=X'00' WHERE manifest_id=? AND first_child=0")) {
-      s.setString(1, other);
+        "UPDATE named_blob_manifests_v1 SET payload=X'00' WHERE account_id=? AND container_id=? AND blob_name=?"
+            + " AND version=?")) {
+      s.setShort(1, ACCOUNT);
+      s.setShort(2, CONTAINER);
+      s.setString(3, NAME);
+      s.setLong(4, 8);
       assertEquals(1, s.executeUpdate());
     }
-    expectDataError("Manifest checksum mismatch", () -> restarted.read(second, 0));
+    expectDataError("Manifest checksum mismatch", () -> restarted.read(second));
   }
 
   @Test
@@ -230,9 +237,10 @@ public class NamedBlobManifestStoreIntegrationTest {
           assertTrue(rows.next());
           assertEquals(0, rows.getInt(1));
         }
-        String winner = stage(named, NAME, 1, root, 1, children.iterator());
-        assertEquals(winner, NamedBlobManifestStore.capture(loser, ACCOUNT, CONTAINER, NAME, 1, root, 1,
-            children.iterator()));
+        stage(named, NAME, 1, root, 1, children.iterator());
+        // A racer whose snapshot predates the winner's commit must still see the sealed row when it checks out
+        // the row FOR UPDATE: that read is not snapshot-isolated, so the retry is idempotent rather than blind.
+        NamedBlobManifestStore.capture(loser, ACCOUNT, CONTAINER, NAME, 1, root, 1, children.iterator());
         expectDataError("Capture retry disagrees", () -> NamedBlobManifestStore.capture(loser, ACCOUNT, CONTAINER,
             NAME, 1, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator()));
         loser.rollback();
@@ -252,9 +260,8 @@ public class NamedBlobManifestStoreIntegrationTest {
       NamedBlobRecord newest = NamedBlobRecord.forUpdate("account", "container", NAME, 3);
       named.updateBlobTtlAndStateToReady(newest).get(10, TimeUnit.SECONDS);
       assertEquals(root.getID(), named.get("account", "container", NAME).get(10, TimeUnit.SECONDS).getBlobId());
-      String job = stage(named, NAME, 3, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK))
-          .iterator());
-      retire(named, Collections.singletonList(job));
+      stage(named, NAME, 3, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator());
+      retire(named, Collections.singletonList(3L));
       try {
         named.get("account", "container", NAME).get(10, TimeUnit.SECONDS);
         fail("Ordinary GET must report Deleted after retirement");
@@ -286,8 +293,9 @@ public class NamedBlobManifestStoreIntegrationTest {
       for (int version = 1; version <= 33; version++) {
         BlobId root = blob(BlobId.BlobDataType.METADATA);
         insertNamed(db, version, root, NamedBlobState.READY);
-        retire(named, Collections.singletonList(stage(named, NAME, version, root, 1,
-            Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator())));
+        stage(named, NAME, version, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK))
+            .iterator());
+        retire(named, Collections.singletonList((long) version));
       }
       assertEquals(33, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2 WHERE retirement_fenced=TRUE"));
     });
@@ -298,8 +306,8 @@ public class NamedBlobManifestStoreIntegrationTest {
     withDatabase((db, named) -> {
       BlobId root = blob(BlobId.BlobDataType.METADATA);
       insertNamed(db, 7, root, NamedBlobState.READY);
-      List<String> jobs = Collections.singletonList(stage(named, NAME, 7, root, 1,
-          Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator()));
+      stage(named, NAME, 7, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator());
+      List<Long> jobs = Collections.singletonList(7L);
       try (Connection publisher = db.getConnection(); Connection replacement = db.getConnection();
           Statement insert = replacement.createStatement()) {
         publisher.setAutoCommit(false);
@@ -325,15 +333,17 @@ public class NamedBlobManifestStoreIntegrationTest {
   @Test
   public void testPublicationRollsBackWhenNameMutationFails() throws Exception {
     withDatabase((db, named) -> {
-      List<String> jobs = new ArrayList<>();
+      List<Long> jobs = new ArrayList<>();
       for (int version = 1; version <= 2; version++) {
         BlobId root = blob(BlobId.BlobDataType.METADATA);
         insertNamed(db, version, root, NamedBlobState.READY);
-        jobs.add(stage(named, NAME, version, root, 1,
-            Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator()));
+        stage(named, NAME, version, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK))
+            .iterator());
+        jobs.add((long) version);
       }
-      // The transaction mutates these versions in manifest-ID order, not version order.
-      int lastVersion = jobs.indexOf(Collections.max(jobs)) + 1;
+      // Publication processes the canonical (ascending-by-version) order; make the trigger fail on the last
+      // version in that order so the test still proves the earlier publish within the same transaction rolls back.
+      long lastVersion = Collections.max(jobs);
       sql(db, "CREATE TRIGGER reject_retirement AFTER UPDATE ON named_blobs_v2 FOR EACH ROW BEGIN"
           + " IF NEW.version=" + lastVersion
           + " THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='fixture rejection'; END IF; END");
@@ -370,8 +380,8 @@ public class NamedBlobManifestStoreIntegrationTest {
     withDatabase((db, named) -> {
       BlobId root = blob(BlobId.BlobDataType.METADATA);
       insertNamed(db, 7, root, NamedBlobState.READY);
-      List<String> jobs = Collections.singletonList(stage(named, NAME, 7, root, 1,
-          Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator()));
+      stage(named, NAME, 7, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator());
+      List<Long> jobs = Collections.singletonList(7L);
       String ttlSql = "UPDATE named_blobs_v2 SET blob_state=1, deleted_ts=NULL WHERE account_id=17"
           + " AND container_id=4 AND blob_name='folder/MixedCase' AND version=";
       ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -414,9 +424,176 @@ public class NamedBlobManifestStoreIntegrationTest {
     });
   }
 
-  private static void retire(MySqlNamedBlobDb db, List<String> jobs) throws Exception {
+  /**
+   * The concretely reported gap: capture/retire only re-validate root and count when {@code capture} itself is
+   * called again. Neither fences a direct SQL write to named_blobs_v2, so once a cleanup job physically removes
+   * the retired row, nothing used to stop a fresh INSERT from rebinding the same tuple to a different root while
+   * the published manifest still names the original. Also confirms what must still be permitted: recreating the
+   * identical row, and writing an entirely different version, are both untouched by the guard.
+   */
+  @Test
+  public void testDirectReinsertAfterPhysicalRemovalRejectsDifferentRoot() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      BlobId impostor = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 7, root, NamedBlobState.READY);
+      stage(named, NAME, 7, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator());
+      retire(named, Collections.singletonList(7L));
+      sql(db, "DELETE FROM named_blobs_v2 WHERE version=7");
+
+      expectSqlRejection("Named tuple already has a manifest for a different root",
+          () -> insertNamed(db, 7, impostor, NamedBlobState.READY));
+
+      // Recreating the exact same row the manifest already names is the documented recovery path and must
+      // still work after the guard rejects an impostor for the same tuple.
+      insertNamed(db, 7, root, NamedBlobState.READY);
+      assertEquals(1, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2 WHERE version=7 AND blob_id=X'"
+          + bytesToHex(root.toBytes()) + "'"));
+      // A different version was never part of this manifest's key and must be entirely unaffected.
+      insertNamed(db, 9, impostor, NamedBlobState.READY);
+      assertEquals(1, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2 WHERE version=9 AND blob_id=X'"
+          + bytesToHex(impostor.toBytes()) + "'"));
+    });
+  }
+
+  /**
+   * Same prohibition, reached through UPDATE instead of INSERT: a direct rebind of blob_id while the row is still
+   * live (not yet purged, not even retired) must be rejected exactly like the post-purge INSERT case, while an
+   * ordinary state-only update (the TTL path) is untouched.
+   */
+  @Test
+  public void testDirectUpdateRejectsDifferentRootWhileManifestExists() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      BlobId impostor = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 7, root, NamedBlobState.READY);
+      stage(named, NAME, 7, root, 1, Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator());
+
+      expectSqlRejection("Named tuple already has a manifest for a different root", () -> {
+        try (Connection c = db.getConnection(); PreparedStatement s = c.prepareStatement(
+            "UPDATE named_blobs_v2 SET blob_id=? WHERE account_id=? AND container_id=? AND blob_name=? AND version=7")) {
+          s.setBytes(1, impostor.toBytes());
+          s.setShort(2, ACCOUNT);
+          s.setShort(3, CONTAINER);
+          s.setString(4, NAME);
+          s.executeUpdate();
+        }
+      });
+
+      // An ordinary state-only update (no blob_id change) never consults the manifest table and must still work.
+      sql(db, "UPDATE named_blobs_v2 SET blob_state=" + NamedBlobState.READY.ordinal() + " WHERE version=7");
+      retire(named, Collections.singletonList(7L));
+      assertEquals(1, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2 WHERE version=7 AND retirement_fenced=TRUE"));
+    });
+  }
+
+  /**
+   * The actual race the guard exists for: a capture that has reserved (but not yet committed) a manifest row must
+   * block a concurrent direct replace for the same tuple, not merely a replace that starts after capture commits.
+   */
+  @Test
+  public void testConcurrentInFlightCaptureBlocksRacingDirectReplace() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      BlobId impostor = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 7, root, NamedBlobState.READY);
+      try (Connection capturing = db.getConnection(); Connection replacing = db.getConnection();
+          Statement replace = replacing.createStatement()) {
+        capturing.setAutoCommit(false);
+        // Reserve the manifest row without committing: this is the in-flight window the guard must defend.
+        NamedBlobManifestStore.capture(capturing, ACCOUNT, CONTAINER, NAME, 7, root, 1,
+            Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator());
+
+        replace.execute("SET SESSION innodb_lock_wait_timeout=1");
+        try {
+          replace.executeUpdate("DELETE FROM named_blobs_v2 WHERE version=7");
+          fail("Purge must wait for an in-flight capture");
+        } catch (SQLException blocked) {
+          assertEquals(1205, blocked.getErrorCode());
+        }
+        capturing.commit();
+        replace.executeUpdate("DELETE FROM named_blobs_v2 WHERE version=7");
+        try {
+          insertNamed(db, 7, impostor, NamedBlobState.READY);
+          fail("A committed reservation must reject replacement");
+        } catch (SQLException conflict) {
+          assertEquals("45000", conflict.getSQLState());
+        }
+      }
+      // After capture's committed root loses the race to no one, the same tuple can still be recreated with the
+      // root the manifest actually names.
+      sql(db, "DELETE FROM named_blobs_v2 WHERE version=7");
+      insertNamed(db, 7, root, NamedBlobState.READY);
+      retire(named, Collections.singletonList(7L));
+      assertEquals(1, scalar(db, "SELECT COUNT(*) FROM named_blobs_v2 WHERE version=7 AND retirement_fenced=TRUE"));
+    });
+  }
+
+  private static String bytesToHex(byte[] bytes) {
+    StringBuilder sb = new StringBuilder(bytes.length * 2);
+    for (byte b : bytes) {
+      sb.append(String.format("%02X", b));
+    }
+    return sb.toString();
+  }
+
+  private static void expectSqlRejection(String reason, SqlAction action) throws Exception {
     try {
-      db.retireWithManifests("account", "container", NAME, jobs).get(10, TimeUnit.SECONDS);
+      action.run();
+      fail("Expected rejection: " + reason);
+    } catch (SQLException expected) {
+      assertEquals("45000", expected.getSQLState());
+      assertTrue(expected.getMessage(), expected.getMessage().contains(reason));
+    }
+  }
+
+  /**
+   * Captures, publishes and reads back the declared cap of real child descriptors in a single manifest row, and
+   * asserts the full ordered list survives exactly, under the same JDBC settings as every other case in this suite
+   * (no streaming fetch size, no paging). Check the stored byte length as well as the decoded IDs.
+   */
+  @Test
+  public void testFullScaleManifestRoundTripAtTheDeclaredChildCap() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 1, root, NamedBlobState.READY);
+      List<BlobId> children = new ArrayList<>(MAX_CHILDREN);
+      for (int i = 0; i < MAX_CHILDREN; i++) {
+        children.add(blob(BlobId.BlobDataType.DATACHUNK));
+      }
+      List<String> ids = children.stream().map(BlobId::getID).collect(Collectors.toList());
+
+      stage(named, NAME, 1, root, children.size(), children.iterator());
+      retire(named, Collections.singletonList(1L));
+
+      NamedBlobManifestStore worker = new NamedBlobManifestStore(db);
+      NamedBlobManifestStore.Manifest manifest = worker.getPublished(ACCOUNT, CONTAINER, NAME, 1);
+      assertEquals(MAX_CHILDREN, manifest.count);
+
+      List<String> recovered = worker.read(manifest);
+
+      assertEquals(ids, recovered);
+      assertEquals(children.stream().mapToInt(child -> 1 + child.sizeInBytes()).sum(),
+          scalar(db, "SELECT OCTET_LENGTH(payload) FROM named_blob_manifests_v1"));
+      assertEquals(1, scalar(db, "SELECT COUNT(*) FROM named_blob_manifests_v1 WHERE publication_key IS NOT NULL"));
+    });
+  }
+
+  /** One more than the declared cap must be rejected immediately, before any descriptor is read or any row written. */
+  @Test
+  public void testCaptureRejectsOneMoreThanTheDeclaredChildCap() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 1, root, NamedBlobState.READY);
+      expectDataError("Unsupported named composite capture", () ->
+          stage(named, NAME, 1, root, MAX_CHILDREN + 1, Collections.<BlobId>emptyIterator()));
+      assertEquals(0, scalar(db, "SELECT COUNT(*) FROM named_blob_manifests_v1"));
+    });
+  }
+
+  private static void retire(MySqlNamedBlobDb db, List<Long> versions) throws Exception {
+    try {
+      db.retireWithManifests("account", "container", NAME, versions).get(10, TimeUnit.SECONDS);
     } catch (ExecutionException e) {
       if (e.getCause() instanceof SQLException) {
         throw (SQLException) e.getCause();
