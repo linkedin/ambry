@@ -222,8 +222,15 @@ public class NamedBlobManifestStoreIntegrationTest {
     }
     insertNamed(db, 8, replacement, NamedBlobState.READY);
     retireOne(named, 7, old, children.size(), children.iterator());
-    assertTrue(writer.isPublished(ACCOUNT, CONTAINER, NAME, Collections.singletonList(7L)));
-    assertFalse(writer.isPublished(ACCOUNT, CONTAINER, NAME, Arrays.asList(7L, 8L)));
+    // isPublished resolves a lost commit reply from the exact content-bound intent, not merely the version set.
+    assertTrue(writer.isPublished(NamedBlobManifestStore.prepare(ACCOUNT, CONTAINER, NAME,
+        Collections.singletonMap(7L, new NamedBlobManifestStore.PendingVersion(old, children.size(),
+            children.iterator())))));
+    Map<Long, NamedBlobManifestStore.PendingVersion> unpublishedPair = new LinkedHashMap<>();
+    unpublishedPair.put(7L, new NamedBlobManifestStore.PendingVersion(old, children.size(), children.iterator()));
+    unpublishedPair.put(8L, new NamedBlobManifestStore.PendingVersion(replacement, 1,
+        Collections.singletonList(children.get(0)).iterator()));
+    assertFalse(writer.isPublished(NamedBlobManifestStore.prepare(ACCOUNT, CONTAINER, NAME, unpublishedPair)));
     assertEquals(replacement.getID(), named.get("account", "container", NAME).get(10, TimeUnit.SECONDS).getBlobId());
     // Remove the retired fixture row entirely: a worker that resolves the source name cannot pass.
     try (Connection c = db.getConnection(); PreparedStatement remove = c.prepareStatement(
@@ -312,6 +319,27 @@ public class NamedBlobManifestStoreIntegrationTest {
         loser.rollback();
       }
     });
+  }
+
+  @Test
+  public void testLegacyOperationsAcrossMigration() throws Exception {
+    BlobId root = blob(BlobId.BlobDataType.METADATA);
+    withDatabase(db -> {
+      try (MySqlNamedBlobDb legacy = namedDb(db)) {
+        legacyPutAndFinalize(legacy, "before", root);
+      }
+    }, (db, named) -> {
+      assertEquals(root.getID(), named.get("account", "container", "before").get(10, TimeUnit.SECONDS).getBlobId());
+      legacyPutAndFinalize(named, "after", root);
+    });
+  }
+
+  private static void legacyPutAndFinalize(MySqlNamedBlobDb named, String name, BlobId root) throws Exception {
+    NamedBlobRecord record = new NamedBlobRecord("account", "container", name, root.getID(), -1, 1);
+    named.put(record, NamedBlobState.IN_PROGRESS, true).get(10, TimeUnit.SECONDS);
+    named.updateBlobTtlAndStateToReady(NamedBlobRecord.forUpdate("account", "container", name, 1))
+        .get(10, TimeUnit.SECONDS);
+    assertEquals(root.getID(), named.get("account", "container", name).get(10, TimeUnit.SECONDS).getBlobId());
   }
 
   @Test
@@ -539,28 +567,159 @@ public class NamedBlobManifestStoreIntegrationTest {
     });
   }
 
+  /**
+   * Deterministically proves non-contention rather than merely hoping two threads race: the first PUT's own AFTER
+   * INSERT trigger has already run and its transaction is deliberately left open (uncommitted) while a second PUT
+   * for an unrelated name is attempted. A bounded lock-wait timeout on the second connection turns a reintroduced
+   * cross-name gap lock into a prompt test failure instead of a hang.
+   */
   @Test
   public void testConcurrentUnrelatedNamedPutsDoNotContendOnTheGuardTrigger() throws Exception {
     withDatabase((db, named) -> {
-      ExecutorService executor = Executors.newFixedThreadPool(2);
-      try {
-        List<Future<?>> futures = new ArrayList<>();
-        for (int i = 0; i < 2; i++) {
-          String name = NAME + "/" + i;
-          BlobId root = blob(BlobId.BlobDataType.METADATA);
-          futures.add(executor.submit(() -> {
-            insertNamed(db, name, 1, root, NamedBlobState.READY);
-            return null;
-          }));
+      String nameA = NAME + "/A";
+      String nameB = NAME + "/B";
+      BlobId rootA = blob(BlobId.BlobDataType.METADATA);
+      BlobId rootB = blob(BlobId.BlobDataType.METADATA);
+      try (Connection first = db.getConnection(); Connection second = db.getConnection()) {
+        first.setAutoCommit(false);
+        try (PreparedStatement insert = first.prepareStatement(
+            "INSERT INTO named_blobs_v2 (account_id,container_id,blob_name,version,blob_id,blob_state)"
+                + " VALUES (?,?,?,?,?,?)")) {
+          insert.setShort(1, ACCOUNT);
+          insert.setShort(2, CONTAINER);
+          insert.setString(3, nameA);
+          insert.setLong(4, 1);
+          insert.setBytes(5, rootA.toBytes());
+          insert.setInt(6, NamedBlobState.READY.ordinal());
+          assertEquals(1, insert.executeUpdate());
         }
-        for (Future<?> f : futures) {
-          // Each future would time out here if the AFTER trigger introduced cross-name contention: it only ever
-          // locks its own tuple, and only after the base row's own insert lock already landed.
-          f.get(10, TimeUnit.SECONDS);
+        try (Statement bound = second.createStatement();
+            PreparedStatement insert = second.prepareStatement(
+                "INSERT INTO named_blobs_v2 (account_id,container_id,blob_name,version,blob_id,blob_state)"
+                    + " VALUES (?,?,?,?,?,?)")) {
+          bound.execute("SET SESSION innodb_lock_wait_timeout=2");
+          insert.setShort(1, ACCOUNT);
+          insert.setShort(2, CONTAINER);
+          insert.setString(3, nameB);
+          insert.setLong(4, 1);
+          insert.setBytes(5, rootB.toBytes());
+          insert.setInt(6, NamedBlobState.READY.ordinal());
+          // This would fail with InnoDB lock wait timeout (1205) here if the AFTER trigger introduced cross-name
+          // contention: it only ever locks its own tuple, and only after the base row's own insert lock landed.
+          assertEquals(1, insert.executeUpdate());
         }
-      } finally {
-        executor.shutdownNow();
+        first.commit();
       }
+    });
+  }
+
+  /**
+   * The concretely reported hazard: two unrelated publishers' locking reads against absent manifest keys could
+   * land in the same InnoDB index gap and deadlock (MySQL error 1213), even though they never touch the same
+   * name. retire() never takes a locking read against a key that might not exist -- it inserts directly, and only
+   * locks a key once a duplicate-key signal proves it exists -- so two fresh, concurrent publications for
+   * different names must both complete without waiting on each other.
+   */
+  @Test
+  public void testTwoUnrelatedFreshPublicationsDoNotContendOnTheManifestTable() throws Exception {
+    withDatabase((db, named) -> {
+      String nameA = NAME + "/A";
+      String nameB = NAME + "/B";
+      BlobId rootA = blob(BlobId.BlobDataType.METADATA);
+      BlobId rootB = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, nameA, 1, rootA, NamedBlobState.READY);
+      insertNamed(db, nameB, 1, rootB, NamedBlobState.READY);
+      List<BlobId> childrenA = Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK));
+      List<BlobId> childrenB = Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK));
+      try (Connection first = db.getConnection(); Connection second = db.getConnection()) {
+        first.setAutoCommit(false);
+        second.setAutoCommit(false);
+        try (Statement bound = second.createStatement()) {
+          bound.execute("SET SESSION innodb_lock_wait_timeout=2");
+        }
+        // Both are genuinely fresh inserts into the same, otherwise empty manifest table; a preceding locking
+        // read on either absent key would gap-lock the other, and the two inserts would then deadlock (1213).
+        NamedBlobManifestStore.retire(first, ACCOUNT, CONTAINER, nameA, Collections.singletonMap(1L,
+            new NamedBlobManifestStore.PendingVersion(rootA, 1, childrenA.iterator())));
+        NamedBlobManifestStore.retire(second, ACCOUNT, CONTAINER, nameB, Collections.singletonMap(1L,
+            new NamedBlobManifestStore.PendingVersion(rootB, 1, childrenB.iterator())));
+        first.commit();
+        second.commit();
+      }
+      assertEquals(2, scalar(db, "SELECT COUNT(*) FROM named_blob_manifests_v1"));
+    });
+  }
+
+  /**
+   * The concretely reported gap: a valid exact replay used to fail once the named range accumulated more unrelated,
+   * unfenced replacement versions than a fresh publish could ever tolerate, even though the originally requested
+   * tuple was already fully published. The non-locking replay check runs first and never touches named_blobs_v2 at
+   * all, so it is never subject to that cap.
+   */
+  @Test
+  public void testExactReplaySucceedsDespiteNamedRangeExceedingTheVersionCap() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 1, root, NamedBlobState.READY);
+      List<BlobId> children = Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK));
+      retireOne(named, 1, root, 1, children.iterator());
+      // Pile up far more unrelated, unfenced replacement versions than a fresh publish could ever tolerate.
+      for (long version = 2; version <= 40; version++) {
+        insertNamed(db, version, blob(BlobId.BlobDataType.METADATA), NamedBlobState.READY);
+      }
+      // Replay the original, already-complete publication with the exact same content: it must still succeed.
+      retireOne(named, 1, root, 1, children.iterator());
+    });
+  }
+
+  /**
+   * The concretely reported gap: isPublished and a replay used to confirm only a coarse version-set digest, so a
+   * second intent with a different root for the same version could falsely confirm the first intent as committed.
+   * Both the fast, non-locking replay path and the authoritative duplicate-key path bind content -- not just the
+   * version set -- so a different root is rejected rather than silently confirmed.
+   */
+  @Test
+  public void testDifferentRootForTheSameVersionCannotImpersonateAPublishedIntent() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId publishedRoot = blob(BlobId.BlobDataType.METADATA);
+      BlobId impostorRoot = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 1, publishedRoot, NamedBlobState.READY);
+      List<BlobId> children = Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK));
+      retireOne(named, 1, publishedRoot, 1, children.iterator());
+      NamedBlobManifestStore writer = new NamedBlobManifestStore(db);
+      assertFalse(writer.isPublished(NamedBlobManifestStore.prepare(ACCOUNT, CONTAINER, NAME,
+          Collections.singletonMap(1L, new NamedBlobManifestStore.PendingVersion(impostorRoot, 1,
+              Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator())))));
+      expectDataError("Conflicting manifest for named version", () -> retireOne(named, 1, impostorRoot, 1,
+          Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator()));
+    });
+  }
+
+  /**
+   * The concretely reported gap: retireWithManifests used to capture the caller's own mutable map by reference
+   * into a lambda queued for a background thread. Everything is now validated and every iterator fully consumed
+   * into an immutable, caller-retainable description before that dispatch, so mutating or clearing the caller's
+   * map immediately after the call returns must not change what gets published.
+   */
+  @Test
+  public void testMutatingCallerMapAfterDispatchDoesNotAffectThePublishedContent() throws Exception {
+    withDatabase((db, named) -> {
+      BlobId root = blob(BlobId.BlobDataType.METADATA);
+      BlobId decoy = blob(BlobId.BlobDataType.METADATA);
+      insertNamed(db, 1, root, NamedBlobState.READY);
+      List<BlobId> children = Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK));
+      Map<Long, NamedBlobManifestStore.PendingVersion> pending = new LinkedHashMap<>();
+      pending.put(1L, new NamedBlobManifestStore.PendingVersion(root, 1, children.iterator()));
+      Future<Void> future = named.retireWithManifests("account", "container", NAME, pending);
+      // Mutate the caller's own map immediately after dispatch: a captured reference to this map would let this
+      // mutation race the background transaction and silently change what it publishes.
+      pending.clear();
+      pending.put(1L, new NamedBlobManifestStore.PendingVersion(decoy, 1,
+          Collections.singletonList(blob(BlobId.BlobDataType.DATACHUNK)).iterator()));
+      future.get(10, TimeUnit.SECONDS);
+      NamedBlobManifestStore worker = new NamedBlobManifestStore(db);
+      NamedBlobManifestStore.Manifest manifest = worker.getPublished(ACCOUNT, CONTAINER, NAME, 1);
+      assertEquals(root.getID(), manifest.root);
     });
   }
 
