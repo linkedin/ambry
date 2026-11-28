@@ -4,8 +4,12 @@ Each manifest stores the ordered child IDs of one immutable metadata blob in a s
 `(account_id, container_id, blob_name, version)`, the same key that identifies the named version. The root ID identifies
 the source of the list; repeated child IDs retain their positions. Prepare the lists in memory. Persist every complete
 manifest and retire the named versions in one transaction. A crash before commit leaves neither a manifest nor a
-retirement. If the commit reply is lost, check the exact version set on the authoritative writer. If not committed,
-retry from the original exact inputs. Never resolve a replacement name or fall back to the router's ordinary delete.
+retirement.
+
+Before dispatch, retain the original named-version keys, each root ID, and its ordered child IDs. If the commit reply is
+lost, check that exact request on the authoritative writer. A match confirms the commit; it does not authorize cleanup.
+No match means the commit was not observed, not that it rolled back. Retry only the original request. If the inputs are
+unavailable, stop. Never resolve the current name to reconstruct the request or fall back to the router's ordinary delete.
 
 A reader with a saved tuple can recover the published list after a restart without fetching the original root.
 Configure the reader data source for `READ COMMITTED` or stronger on every checkout.
@@ -93,9 +97,10 @@ The database operations alone are not safe to activate. In addition to the DELET
 - Make ordinary GET and all LIST paths honor `retirement_fenced` on the **selected version**, irrespective of the
   frontend clock. Do not discard the newest tombstone before selecting a version: that can expose older data. Preserve
   include-deleted GET access to the exact retired root.
-- Before permitting failover, verify each promotion candidate has applied all acknowledged retirement transactions
-  (manifest rows and fenced named versions), not just the schema and trigger. Do not promote or serve from a candidate whose
-  applied position cannot be proven sufficient.
+- Before reclaiming any data, verify that every replica eligible to serve or be promoted has applied the retirement
+  transaction (both the manifest and the named-version fence), even if the client never received the commit reply.
+  Exclude replicas from serving and promotion until their applied position proves they include that transaction. If
+  failover cannot enforce this rule, keep reclamation disabled: a stale replica could serve a name whose data is gone.
 - Admit only namespaces that will stay within the version limit **with cleanup excluded**. PUT keeps older versions:
   an initial permanent PUT and 32 overwrites can leave 33 unfenced rows. Even below the limit, a live non-composite
   version cannot supply a composite manifest. Restrict writes accordingly or reconcile history safely first.
