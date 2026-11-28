@@ -493,6 +493,48 @@ public class MySqlNamedBlobDb implements NamedBlobDb {
         }, null, this.metricsRecoder.namedBlobDBUpdateErrorCount);
   }
 
+  /**
+   * Validate, publish and fence this exact set of named versions in one transaction. Never returns IDs for a
+   * router cascade. There is no separate staging step: a version's descriptors are supplied and consumed in the
+   * same call that retires it. Everything is validated and every iterator is fully consumed into an immutable
+   * {@link NamedBlobManifestStore.PreparedRetirement} synchronously, before this is handed to the background
+   * transaction thread: the thread never sees {@code pendingVersions} itself, so the caller mutating or clearing
+   * that map after this call returns cannot change what gets published.
+   */
+  CompletableFuture<Void> retireWithManifests(String accountName, String containerName, String blobName,
+      Map<Long, NamedBlobManifestStore.PendingVersion> pendingVersions) {
+    Account account = accountService.getAccountByName(accountName);
+    if (account == null) {
+      CompletableFuture<Void> failed = new CompletableFuture<>();
+      failed.completeExceptionally(
+          new RestServiceException("Account not found: " + accountName, RestServiceErrorCode.NotFound));
+      return failed;
+    }
+    Container container = account.getContainerByName(containerName);
+    if (container == null) {
+      CompletableFuture<Void> failed = new CompletableFuture<>();
+      failed.completeExceptionally(
+          new RestServiceException("Container not found: " + containerName, RestServiceErrorCode.NotFound));
+      return failed;
+    }
+    NamedBlobManifestStore.PreparedRetirement prepared;
+    try {
+      prepared = NamedBlobManifestStore.prepare((short) account.getId(), (short) container.getId(), blobName,
+          pendingVersions);
+    } catch (SQLException e) {
+      CompletableFuture<Void> failed = new CompletableFuture<>();
+      failed.completeExceptionally(e);
+      return failed;
+    }
+    return executeTransactionAsync(accountName, containerName, false, (ignoredAccount, ignoredContainer, connection) -> {
+      if (config.enableHardDelete) {
+        throw new UnsupportedOperationException("Manifest retirement requires named soft delete");
+      }
+      NamedBlobManifestStore.retire(connection, prepared);
+      return null;
+    }, null, metricsRecoder.namedBlobDBDeleteErrorCount);
+  }
+
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {

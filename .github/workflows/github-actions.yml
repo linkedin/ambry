@@ -199,6 +199,18 @@ jobs:
           arguments: --scan --warning-mode=summary intTest -x :ambry-server:intTest codeCoverageReport
           gradle-version: wrapper
 
+      - name: Verify named manifest migration tests ran
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree
+          report, = Path("ambry-named-mysql/build/test-results/intTest").glob("TEST-*.NamedBlobManifestStoreIntegrationTest.xml")
+          suite = ElementTree.parse(report).getroot()
+          if int(suite.attrib["tests"]) == 0 or int(suite.attrib["skipped"]) != 0:
+              raise SystemExit(f"Migration suite did not fully execute: {suite.attrib}")
+          print(f'{suite.attrib["tests"]} manifest migration tests executed; none skipped')
+          PY
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         env:
